@@ -44,10 +44,19 @@ class Game{
             }
         }
     }
-    // TODO: Сделать генерацию не под змейкой
+
     protected _createFruit(): void{
-        const x = Math.floor(Math.random() * (this._sizeX));
-        const y = Math.floor(Math.random() * (this._sizeY));
+        const snake: Array<[number, number]> = this._snake.getSnake();
+        let inSnake: boolean = true;
+        let x: number;
+        let y: number;
+        while(inSnake){
+            x = Math.floor(Math.random() * (this._sizeX));
+            y = Math.floor(Math.random() * (this._sizeY));
+            inSnake = snake.some(function(item){
+                return (item[0] === x && item[1] === y);
+            });
+        }
         this._fruitCoord = [x, y];
     }
 
