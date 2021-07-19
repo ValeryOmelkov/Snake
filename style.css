@@ -1,0 +1,10 @@
+body{
+    text-align: center;
+}
+
+.gameCanvas{
+    width: 510px;
+    height: 510px;
+    border: 30px solid rgb(68, 68, 68);
+    margin: 20px;
+}
