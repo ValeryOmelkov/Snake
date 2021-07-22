@@ -16,9 +16,9 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from) {
 };
 var Game = /** @class */ (function () {
     function Game() {
-        this._sizeX = 17;
-        this._sizeY = 17;
-        this._sizeCell = 30;
+        this._sizeX = 9;
+        this._sizeY = 9;
+        this._sizeCell = 50;
         this._canvas = document.getElementById('canvas');
         this._canvas.width = this._sizeX * this._sizeCell;
         this._canvas.height = this._sizeY * this._sizeCell;
@@ -32,8 +32,55 @@ var Game = /** @class */ (function () {
         this.drawFruit();
     }
     Game.prototype.getState = function () {
-        var state = [];
-        return state;
+        var head = this.snake.head;
+        var wallState = []; // Значения от 0 до 1
+        var bodyState = new Array(8).fill(0); // Значения от 0 до 1 | 0 при отсутствии в поле видимости
+        var foodState = new Array(8).fill(0); // Значения от 0 до 1 | 0 при отсутствии в поле видимости
+        // Стенки
+        wallState.push(head.y); // Вверх
+        wallState.push(Math.min(this._sizeX - head.x, head.y)); // Вверх-вправо
+        wallState.push(this._sizeX - head.x); // Вправо
+        wallState.push(Math.min(this._sizeX - head.x, this._sizeY - head.y)); // Вниз-вправо 
+        wallState.push(this._sizeY - head.y); // Вниз
+        wallState.push(Math.min(head.x, this._sizeY - head.y)); // Вниз-влево
+        wallState.push(head.x); // Влево
+        wallState.push(Math.min(head.x, head.y)); // Вверх-влево
+        wallState = wallState.map(function (n) { return 1 / n; }); // Нормализация от 0 до 1
+        // Тело
+        var mpX; // Множитель для X
+        var mpY; // Множитель для Y
+        var _loop_1 = function (i) {
+            mpX = (i > 4) ? -1 : ((i < 4 && i > 0) ? 1 : 0);
+            mpY = (i > 2 && i < 6) ? 1 : ((i > 6 || i < 2) ? -1 : 0);
+            var distance = 1;
+            while (!(head.x + (distance * mpX) < 0 || head.x + (distance * mpX) >= this_1._sizeX || head.y + (distance * mpY) < 0 || head.y + (distance * mpY) >= this_1._sizeY)) {
+                if (this_1.snake.body.filter(function (item) { return item.x === head.x + (distance * mpX) && item.y === head.y + (distance * mpY); }).length > 0) {
+                    bodyState[i] = distance;
+                    break;
+                }
+                distance++;
+            }
+        };
+        var this_1 = this;
+        for (var i = 0; i < 8; i++) {
+            _loop_1(i);
+        }
+        bodyState = bodyState.map(function (n) { return n != 0 ? 1 / n : 0; });
+        // Еда
+        if (head.x === this._fruit.x) { // Верх/Низ
+            head.y > this._fruit.y ? foodState[0] = head.y - this._fruit.y : foodState[4] = this._fruit.y - head.y;
+        }
+        else if (head.y === this._fruit.y) { // Лево/Право
+            head.x > this._fruit.x ? foodState[6] = head.x - this._fruit.x : foodState[2] = this._fruit.x - head.x;
+        }
+        else if (head.x - this._fruit.x === head.y - this._fruit.y) { // Диагональ с лева направо, сверху вниз
+            head.x > this._fruit.x ? foodState[7] = Math.abs(head.x - this._fruit.x) : foodState[3] = Math.abs(head.x - this._fruit.x);
+        }
+        else if (Math.abs(head.x - this._fruit.x) === Math.abs(head.y - this._fruit.y)) { // Диагональ с лева направо, снизу вверх
+            head.x > this._fruit.x ? foodState[5] = Math.abs(head.x - this._fruit.x) : foodState[1] = Math.abs(head.x - this._fruit.x);
+        }
+        foodState = foodState.map(function (n) { return n != 0 ? 1 / n : 0; }); // Нормализация от 0 до 1
+        return __spreadArray(__spreadArray(__spreadArray([], wallState), bodyState), foodState);
     };
     Game.prototype.step = function (action) {
         if (action === void 0) { action = 0; }
@@ -135,7 +182,7 @@ var Game = /** @class */ (function () {
 }());
 var Snake = /** @class */ (function () {
     function Snake(context, size, startPoint) {
-        this.body = [{ x: 8, y: 9 }];
+        this.body = [];
         this.direction = Direction.Up;
         this._ctx = context;
         this._sizeCell = size;

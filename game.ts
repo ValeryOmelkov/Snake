@@ -5,9 +5,9 @@ class Game {
     public snake: Snake;
     protected _fruit: Point;
     
-    protected _sizeX: number = 17;
-    protected _sizeY: number = 17;
-    protected _sizeCell: number = 30;
+    protected _sizeX: number = 9;
+    protected _sizeY: number = 9;
+    protected _sizeCell: number = 50;
     
     
     constructor() {
@@ -26,8 +26,49 @@ class Game {
     }
     
     public getState(): Array<number> {
-        let state = [];
-        return state;
+        const head: Point = this.snake.head;
+        let wallState: Array<number> = []; // Значения от 0 до 1
+        let bodyState: Array<number> = new Array(8).fill(0); // Значения от 0 до 1 | 0 при отсутствии в поле видимости
+        let foodState: Array<number> = new Array(8).fill(0); // Значения от 0 до 1 | 0 при отсутствии в поле видимости
+        // Стенки
+        wallState.push(head.y);                                               // Вверх
+        wallState.push(Math.min(this._sizeX - head.x, head.y));               // Вверх-вправо
+        wallState.push(this._sizeX - head.x);                                 // Вправо
+        wallState.push(Math.min(this._sizeX - head.x, this._sizeY - head.y)); // Вниз-вправо 
+        wallState.push(this._sizeY - head.y);                                 // Вниз
+        wallState.push(Math.min(head.x, this._sizeY - head.y));               // Вниз-влево
+        wallState.push(head.x);                                               // Влево
+        wallState.push(Math.min(head.x, head.y));                             // Вверх-влево
+        wallState = wallState.map((n) => {return 1/n}); // Нормализация от 0 до 1
+        // Тело
+        let mpX: number; // Множитель для X
+        let mpY: number; // Множитель для Y
+        for(let i = 0; i < 8; i++){
+            mpX = (i > 4) ? -1 : ((i < 4 && i > 0) ? 1 : 0);
+            mpY = (i > 2 && i < 6) ? 1 : ((i > 6 || i < 2) ? -1 : 0);
+            let distance: number = 1;
+            while(!(head.x + (distance * mpX) < 0 || head.x + (distance * mpX) >= this._sizeX || head.y + (distance * mpY) < 0 || head.y + (distance * mpY) >= this._sizeY)){
+                if (this.snake.body.filter((item) => item.x === head.x + (distance * mpX) && item.y === head.y + (distance * mpY)).length > 0){
+                    bodyState[i] = distance;
+                    break;
+                }
+                distance++;
+            }
+        }
+        bodyState = bodyState.map((n) => {return n != 0 ? 1/n : 0})
+        // Еда
+        if (head.x === this._fruit.x){ // Верх/Низ
+            head.y > this._fruit.y ? foodState[0] = head.y - this._fruit.y : foodState[4] = this._fruit.y - head.y;
+        } else if (head.y === this._fruit.y){ // Лево/Право
+            head.x > this._fruit.x ? foodState[6] = head.x - this._fruit.x : foodState[2] = this._fruit.x - head.x;
+        } else if (head.x - this._fruit.x === head.y - this._fruit.y){ // Диагональ с лева направо, сверху вниз
+            head.x > this._fruit.x ? foodState[7] = Math.abs(head.x - this._fruit.x) : foodState[3] = Math.abs(head.x - this._fruit.x);
+        } else if (Math.abs(head.x - this._fruit.x) === Math.abs(head.y - this._fruit.y)){ // Диагональ с лева направо, снизу вверх
+            head.x > this._fruit.x ? foodState[5] = Math.abs(head.x - this._fruit.x) : foodState[1] = Math.abs(head.x - this._fruit.x);
+        }
+        foodState = foodState.map((n) => {return n != 0 ? 1/n : 0}); // Нормализация от 0 до 1
+
+        return [...wallState, ...bodyState, ...foodState];
     }
 
     public step(action: number = 0) {
@@ -143,7 +184,7 @@ class Snake {
     protected _ctx: any;
     protected _sizeCell: number;
     public head: Point;
-    public body: Point[] = [{x:8, y:9}];
+    public body: Point[] = [];
     public direction: Direction = Direction.Up;
     
     constructor(context: any, size: number, startPoint: Point) {
