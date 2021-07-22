@@ -58,6 +58,7 @@ var Game = /** @class */ (function () {
     Game.prototype._restart = function () {
         this._isStarted = false;
         clearInterval(this._processInterval);
+        this._directionChosen = false;
         this._pauseBtn.disabled = true;
         this._drawField();
         this._snake = new Snake(this._ctx, this._sizeCell, { x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2) });
@@ -68,17 +69,17 @@ var Game = /** @class */ (function () {
     Game.prototype._onKeyPress = function (event) {
         if (this._directionChosen)
             return;
-        switch (event.key) {
-            case 'w':
+        switch (event.code) {
+            case 'KeyW':
                 this._snake.up();
                 break;
-            case 'a':
+            case 'KeyA':
                 this._snake.left();
                 break;
-            case 's':
+            case 'KeyS':
                 this._snake.down();
                 break;
-            case 'd':
+            case 'KeyD':
                 this._snake.right();
                 break;
             default: return;

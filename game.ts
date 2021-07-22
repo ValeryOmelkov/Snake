@@ -60,6 +60,7 @@ class Game {
     protected _restart() {
         this._isStarted = false;
         clearInterval(this._processInterval);
+        this._directionChosen = false;
         this._pauseBtn.disabled = true;
         this._drawField();
         this._snake = new Snake(this._ctx, this._sizeCell, {x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2)});
@@ -71,11 +72,19 @@ class Game {
     protected _onKeyPress(event: any): void {
         if (this._directionChosen) return;
 
-        switch(event.key){
-            case 'w': this._snake.up(); break;
-            case 'a': this._snake.left(); break;
-            case 's': this._snake.down(); break;
-            case 'd': this._snake.right(); break;
+        switch(event.code){
+            case 'KeyW': 
+                this._snake.up(); 
+                break;
+            case 'KeyA': 
+                this._snake.left();
+                break;
+            case 'KeyS': 
+                this._snake.down(); 
+                break;
+            case 'KeyD': 
+                this._snake.right(); 
+                break;
             default: return;
         }
 
@@ -119,10 +128,18 @@ class Game {
         const head: Point = {...this._snake.head};
         
         switch(direction) {
-            case 'up': head.y--; break;
-            case 'down': head.y++; break;
-            case 'right': head.x++; break;
-            case 'left': head.x--; break;
+            case 'up': 
+                head.y--; 
+                break;
+            case 'down': 
+                head.y++; 
+                break;
+            case 'right': 
+                head.x++;
+                break;
+            case 'left': 
+                head.x--;
+                break;
         }
         
         let growing: boolean = false;
@@ -197,10 +214,18 @@ class Snake {
         if (!growing) this.body.pop();
         
         switch(this.direction) {
-            case 'up': this.head.y--; break;
-            case 'down': this.head.y++; break;
-            case 'right': this.head.x++; break;
-            case 'left': this.head.x--; break;
+            case 'up': 
+                this.head.y--; 
+                break;
+            case 'down': 
+                this.head.y++; 
+                break;
+            case 'right': 
+                this.head.x++; 
+                break;
+            case 'left': 
+                this.head.x--; 
+                break;
         }
     }
     
