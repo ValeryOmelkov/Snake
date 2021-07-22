@@ -1,25 +1,9 @@
-var __assign = (this && this.__assign) || function () {
-    __assign = Object.assign || function(t) {
-        for (var s, i = 1, n = arguments.length; i < n; i++) {
-            s = arguments[i];
-            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
-                t[p] = s[p];
-        }
-        return t;
-    };
-    return __assign.apply(this, arguments);
-};
-var __spreadArray = (this && this.__spreadArray) || function (to, from) {
-    for (var i = 0, il = from.length, j = to.length; i < il; i++, j++)
-        to[j] = from[i];
-    return to;
-};
-var Game = /** @class */ (function () {
-    function Game() {
-        this._sizeX = 17;
-        this._sizeY = 17;
+class Game {
+    constructor() {
+        this._sizeX = 15;
+        this._sizeY = 15;
         this._sizeCell = 30;
-        this._speed = 100;
+        this._speed = 1500;
         this._isStarted = false;
         this._directionChosen = false;
         this._canvas = document.getElementById('canvas');
@@ -39,23 +23,22 @@ var Game = /** @class */ (function () {
         this._createFruit();
         this._drawFruit();
     }
-    Game.prototype._startGame = function () {
-        var _this = this;
+    _startGame() {
         this._pauseBtn.disabled = false;
-        this._processInterval = setInterval(function () {
-            _this._moveSnake();
-            _this._drawField();
-            _this._drawFruit();
-            _this._snake.draw();
-            _this._directionChosen = false;
+        this._processInterval = setInterval(() => {
+            this._moveSnake();
+            this._drawField();
+            this._drawFruit();
+            this._snake.draw();
+            this._directionChosen = false;
         }, this._speed);
-    };
-    Game.prototype._pause = function () {
+    }
+    _pause() {
         this._isStarted = false;
         this._pauseBtn.disabled = true;
         clearInterval(this._processInterval);
-    };
-    Game.prototype._restart = function () {
+    }
+    _restart() {
         this._isStarted = false;
         clearInterval(this._processInterval);
         this._directionChosen = false;
@@ -65,8 +48,55 @@ var Game = /** @class */ (function () {
         this._snake.draw();
         this._createFruit();
         this._drawFruit();
-    };
-    Game.prototype._onKeyPress = function (event) {
+    }
+    _getState() {
+        const head = this._snake.head;
+        let wallState = []; // Значения от 0 до 1
+        let bodyState = new Array(8).fill(0); // Значения от 0 до 1 | 0 при отсутствии в поле видимости
+        let foodState = new Array(8).fill(0); // Значения от 0 до 1 | 0 при отсутствии в поле видимости
+        // Стенки
+        wallState.push(head.y); // Вверх
+        wallState.push(Math.min(this._sizeX - head.x, head.y)); // Вверх-вправо
+        wallState.push(this._sizeX - head.x); // Вправо
+        wallState.push(Math.min(this._sizeX - head.x, this._sizeY - head.y)); // Вниз-вправо 
+        wallState.push(this._sizeY - head.y); // Вниз
+        wallState.push(Math.min(head.x, this._sizeY - head.y)); // Вниз-влево
+        wallState.push(head.x); // Влево
+        wallState.push(Math.min(head.x, head.y)); // Вверх-влево
+        wallState = wallState.map((n) => { return 1 / n; }); // Нормализация от 0 до 1
+        // Тело
+        let mpX; // Множитель для X
+        let mpY; // Множитель для Y
+        for (let i = 0; i < 8; i++) {
+            mpX = (i > 4) ? -1 : ((i < 4 && i > 0) ? 1 : 0);
+            mpY = (i > 2 && i < 6) ? 1 : ((i > 6 || i < 2) ? -1 : 0);
+            let distance = 1;
+            while (!(head.x + (distance * mpX) < 0 || head.x + (distance * mpX) >= this._sizeX || head.y + (distance * mpY) < 0 || head.y + (distance * mpY) >= this._sizeY)) {
+                if (this._snake.body.filter((item) => item.x === head.x + (distance * mpX) && item.y === head.y + (distance * mpY)).length > 0) {
+                    bodyState[i] = distance;
+                    break;
+                }
+                distance++;
+            }
+        }
+        bodyState = bodyState.map((n) => { return n != 0 ? 1 / n : 0; });
+        // Еда
+        if (head.x === this._fruit.x) { // Верх/Низ
+            head.y > this._fruit.y ? foodState[0] = head.y - this._fruit.y : foodState[4] = this._fruit.y - head.y;
+        }
+        else if (head.y === this._fruit.y) { // Лево/Право
+            head.x > this._fruit.x ? foodState[6] = head.x - this._fruit.x : foodState[2] = this._fruit.x - head.x;
+        }
+        else if (head.x - this._fruit.x === head.y - this._fruit.y) { // Диагональ с лева направо, сверху вниз
+            head.x > this._fruit.x ? foodState[7] = Math.abs(head.x - this._fruit.x) : foodState[3] = Math.abs(head.x - this._fruit.x);
+        }
+        else if (Math.abs(head.x - this._fruit.x) === Math.abs(head.y - this._fruit.y)) { // Диагональ с лева направо, снизу вверх
+            head.x > this._fruit.x ? foodState[5] = Math.abs(head.x - this._fruit.x) : foodState[1] = Math.abs(head.x - this._fruit.x);
+        }
+        foodState = foodState.map((n) => { return n != 0 ? 1 / n : 0; }); // Нормализация от 0 до 1
+        return [...wallState, ...bodyState, ...foodState];
+    }
+    _onKeyPress(event) {
         if (this._directionChosen)
             return;
         switch (event.code) {
@@ -89,34 +119,34 @@ var Game = /** @class */ (function () {
             this._startGame();
             this._isStarted = true;
         }
-    };
-    Game.prototype._drawField = function () {
-        for (var y = 0; y < this._sizeY; y++) {
-            for (var x = 0; x < this._sizeX; x++) {
+    }
+    _drawField() {
+        for (let y = 0; y < this._sizeY; y++) {
+            for (let x = 0; x < this._sizeX; x++) {
                 this._ctx.fillStyle = ((x + (y % 2)) % 2 === 0) ? '#AAAAAA' : '#777777';
                 this._ctx.fillRect(x * this._sizeCell, y * this._sizeCell, this._sizeCell, this._sizeCell);
             }
         }
-    };
-    Game.prototype._createFruit = function () {
-        var snake = __spreadArray([this._snake.head], this._snake.body);
-        var inSnake = true;
-        var x;
-        var y;
+    }
+    _createFruit() {
+        const snake = [this._snake.head, ...this._snake.body];
+        let inSnake = true;
+        let x;
+        let y;
         while (inSnake) {
             x = Math.floor(Math.random() * (this._sizeX));
             y = Math.floor(Math.random() * (this._sizeY));
-            inSnake = snake.some(function (item) { return item.x === x && item.y === y; });
+            inSnake = snake.some((item) => item.x === x && item.y === y);
         }
-        this._fruit = { x: x, y: y };
-    };
-    Game.prototype._drawFruit = function () {
+        this._fruit = { x, y };
+    }
+    _drawFruit() {
         this._ctx.fillStyle = '#AA0000';
         this._ctx.fillRect(this._fruit.x * this._sizeCell, this._fruit.y * this._sizeCell, this._sizeCell, this._sizeCell);
-    };
-    Game.prototype._moveSnake = function () {
-        var direction = this._snake.direction;
-        var head = __assign({}, this._snake.head);
+    }
+    _moveSnake() {
+        const direction = this._snake.direction;
+        const head = Object.assign({}, this._snake.head);
         switch (direction) {
             case 'up':
                 head.y--;
@@ -131,7 +161,7 @@ var Game = /** @class */ (function () {
                 head.x--;
                 break;
         }
-        var growing = false;
+        let growing = false;
         if (this._checkFruit(head)) {
             this._createFruit();
             this._drawFruit();
@@ -144,51 +174,49 @@ var Game = /** @class */ (function () {
         else {
             this._snake.move(growing);
         }
-    };
-    Game.prototype._checkFruit = function (head) {
+    }
+    _checkFruit(head) {
         if (head.x === this._fruit.x && head.y === this._fruit.y) {
             return true;
         }
         return false;
-    };
-    Game.prototype._checkIsAlive = function (head) {
+    }
+    _checkIsAlive(head) {
         // Проверка на столкновение со стеной
         if ((head.x < 0) || (head.x >= this._sizeX) || (head.y < 0) || (head.y >= this._sizeY)) {
             return false;
         }
         // Проверка на столкновение с туловищем
-        for (var _i = 0, _a = this._snake.body; _i < _a.length; _i++) {
-            var item = _a[_i];
+        for (const item of this._snake.body) {
             if (item.x === head.x && item.y === head.y) {
                 return false;
             }
         }
         return true;
-    };
-    Game.prototype._endGame = function () {
+    }
+    _endGame() {
         clearInterval(this._processInterval);
         this._pauseBtn.disabled = true;
         alert('Поражение!');
-    };
-    return Game;
-}());
-var Snake = /** @class */ (function () {
-    function Snake(context, size, startPoint) {
+    }
+}
+class Snake {
+    constructor(context, size, startPoint) {
         this.body = [];
         this._ctx = context;
         this._sizeCell = size;
         this.head = startPoint;
     }
-    Snake.prototype.draw = function () {
+    draw() {
         this._ctx.fillStyle = '#008800';
         this._ctx.fillRect(this.head.x * this._sizeCell, this.head.y * this._sizeCell, this._sizeCell, this._sizeCell);
         this._ctx.fillStyle = '#00BB00';
-        for (var i = 0; i < this.body.length; i++) {
+        for (let i = 0; i < this.body.length; i++) {
             this._ctx.fillRect(this.body[i].x * this._sizeCell, this.body[i].y * this._sizeCell, this._sizeCell, this._sizeCell);
         }
-    };
-    Snake.prototype.move = function (growing) {
-        var oldHead = __assign({}, this.head);
+    }
+    move(growing) {
+        const oldHead = Object.assign({}, this.head);
         this.body.unshift(oldHead);
         if (!growing)
             this.body.pop();
@@ -206,19 +234,18 @@ var Snake = /** @class */ (function () {
                 this.head.x--;
                 break;
         }
-    };
-    Snake.prototype.up = function () {
+    }
+    up() {
         this.direction = this.direction != 'down' ? 'up' : 'down';
-    };
-    Snake.prototype.left = function () {
+    }
+    left() {
         this.direction = this.direction != 'right' ? 'left' : 'right';
-    };
-    Snake.prototype.down = function () {
+    }
+    down() {
         this.direction = this.direction != 'up' ? 'down' : 'up';
-    };
-    Snake.prototype.right = function () {
+    }
+    right() {
         this.direction = this.direction != 'left' ? 'right' : 'left';
-    };
-    return Snake;
-}());
-var game = new Game;
+    }
+}
+const game = new Game;
