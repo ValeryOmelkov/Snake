@@ -19,78 +19,66 @@ var Game = /** @class */ (function () {
         this._sizeX = 17;
         this._sizeY = 17;
         this._sizeCell = 30;
-        this._speed = 100;
-        this._isStarted = false;
-        this._directionChosen = false;
         this._canvas = document.getElementById('canvas');
         this._canvas.width = this._sizeX * this._sizeCell;
         this._canvas.height = this._sizeY * this._sizeCell;
         this._canvas.style.width = this._sizeX * this._sizeCell + 'px';
         this._canvas.style.height = this._sizeY * this._sizeCell + 'px';
         this._ctx = this._canvas.getContext('2d');
-        this._pauseBtn = document.getElementById('pause');
-        this._pauseBtn.addEventListener('click', this._pause.bind(this));
-        this._restartBtn = document.getElementById('restart');
-        this._restartBtn.addEventListener('click', this._restart.bind(this));
-        document.addEventListener('keypress', this._onKeyPress.bind(this));
-        this._drawField();
-        this._snake = new Snake(this._ctx, this._sizeCell, { x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2) });
-        this._snake.draw();
+        this.drawField();
+        this.snake = new Snake(this._ctx, this._sizeCell, { x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2) });
+        this.snake.draw();
         this._createFruit();
-        this._drawFruit();
+        this.drawFruit();
     }
-    Game.prototype._startGame = function () {
-        var _this = this;
-        this._pauseBtn.disabled = false;
-        this._processInterval = setInterval(function () {
-            _this._moveSnake();
-            _this._drawField();
-            _this._drawFruit();
-            _this._snake.draw();
-            _this._directionChosen = false;
-        }, this._speed);
+    Game.prototype.getState = function () {
+        var state = [];
+        return state;
     };
-    Game.prototype._pause = function () {
-        this._isStarted = false;
-        this._pauseBtn.disabled = true;
-        clearInterval(this._processInterval);
-    };
-    Game.prototype._restart = function () {
-        this._isStarted = false;
-        clearInterval(this._processInterval);
-        this._directionChosen = false;
-        this._pauseBtn.disabled = true;
-        this._drawField();
-        this._snake = new Snake(this._ctx, this._sizeCell, { x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2) });
-        this._snake.draw();
-        this._createFruit();
-        this._drawFruit();
-    };
-    Game.prototype._onKeyPress = function (event) {
-        if (this._directionChosen)
-            return;
-        switch (event.code) {
-            case 'KeyW':
-                this._snake.up();
+    Game.prototype.step = function (action) {
+        if (action === void 0) { action = 0; }
+        // Начальная награда - 0, если не изменится, значит ходим по пустой клетке
+        var reward = 0;
+        var head = __assign({}, this.snake.head);
+        // Меняем направление змеи
+        /*
+            direction - 1 === Повернуть влево по часовой
+            direction + 0 === Не поворачивать
+            direction + 1 === Повернуть вправо по часовой
+        */
+        this.snake.direction = (this.snake.direction + (action > -1 ? action : 3)) % 4;
+        // Смотрим, где окажется голова
+        switch (this.snake.direction) {
+            case Direction.Up:
+                head.y--;
                 break;
-            case 'KeyA':
-                this._snake.left();
+            case Direction.Right:
+                head.x++;
                 break;
-            case 'KeyS':
-                this._snake.down();
+            case Direction.Down:
+                head.y++;
                 break;
-            case 'KeyD':
-                this._snake.right();
+            case Direction.Left:
+                head.x--;
                 break;
-            default: return;
         }
-        this._directionChosen = true;
-        if (!this._isStarted) {
-            this._startGame();
-            this._isStarted = true;
+        // Проверям, если новая голова ударилась
+        if (!this._checkIsAlive(head)) {
+            reward = -1000;
+            this._endGame(); // Если змея ударилась, вызываем эту функцию
+            return reward; // и выходим
         }
+        // Проверям, если новая голова съела фрукт
+        if (this._checkFruit(head)) {
+            reward = 100;
+            this._createFruit();
+            this.drawFruit();
+        }
+        // Ходим змейкой
+        this.snake.move(reward === 100);
+        return reward;
     };
-    Game.prototype._drawField = function () {
+    Game.prototype.drawField = function () {
         for (var y = 0; y < this._sizeY; y++) {
             for (var x = 0; x < this._sizeX; x++) {
                 this._ctx.fillStyle = ((x + (y % 2)) % 2 === 0) ? '#AAAAAA' : '#777777';
@@ -99,7 +87,7 @@ var Game = /** @class */ (function () {
         }
     };
     Game.prototype._createFruit = function () {
-        var snake = __spreadArray([this._snake.head], this._snake.body);
+        var snake = __spreadArray([this.snake.head], this.snake.body);
         var inSnake = true;
         var x;
         var y;
@@ -110,40 +98,9 @@ var Game = /** @class */ (function () {
         }
         this._fruit = { x: x, y: y };
     };
-    Game.prototype._drawFruit = function () {
+    Game.prototype.drawFruit = function () {
         this._ctx.fillStyle = '#AA0000';
         this._ctx.fillRect(this._fruit.x * this._sizeCell, this._fruit.y * this._sizeCell, this._sizeCell, this._sizeCell);
-    };
-    Game.prototype._moveSnake = function () {
-        var direction = this._snake.direction;
-        var head = __assign({}, this._snake.head);
-        switch (direction) {
-            case 'up':
-                head.y--;
-                break;
-            case 'down':
-                head.y++;
-                break;
-            case 'right':
-                head.x++;
-                break;
-            case 'left':
-                head.x--;
-                break;
-        }
-        var growing = false;
-        if (this._checkFruit(head)) {
-            this._createFruit();
-            this._drawFruit();
-            growing = true;
-        }
-        if (!this._checkIsAlive(head)) {
-            this._endGame();
-            return;
-        }
-        else {
-            this._snake.move(growing);
-        }
     };
     Game.prototype._checkFruit = function (head) {
         if (head.x === this._fruit.x && head.y === this._fruit.y) {
@@ -157,7 +114,7 @@ var Game = /** @class */ (function () {
             return false;
         }
         // Проверка на столкновение с туловищем
-        for (var _i = 0, _a = this._snake.body; _i < _a.length; _i++) {
+        for (var _i = 0, _a = this.snake.body; _i < _a.length; _i++) {
             var item = _a[_i];
             if (item.x === head.x && item.y === head.y) {
                 return false;
@@ -166,15 +123,20 @@ var Game = /** @class */ (function () {
         return true;
     };
     Game.prototype._endGame = function () {
-        clearInterval(this._processInterval);
-        this._pauseBtn.disabled = true;
-        alert('Поражение!');
+        console.log('Поражение!');
+        // Запускаем игру сначала
+        this.drawField();
+        this.snake = new Snake(this._ctx, this._sizeCell, { x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2) });
+        this.snake.draw();
+        this._createFruit();
+        this.drawFruit();
     };
     return Game;
 }());
 var Snake = /** @class */ (function () {
     function Snake(context, size, startPoint) {
-        this.body = [];
+        this.body = [{ x: 8, y: 9 }];
+        this.direction = Direction.Up;
         this._ctx = context;
         this._sizeCell = size;
         this.head = startPoint;
@@ -193,32 +155,64 @@ var Snake = /** @class */ (function () {
         if (!growing)
             this.body.pop();
         switch (this.direction) {
-            case 'up':
+            case Direction.Up:
                 this.head.y--;
                 break;
-            case 'down':
-                this.head.y++;
-                break;
-            case 'right':
+            case Direction.Right:
                 this.head.x++;
                 break;
-            case 'left':
+            case Direction.Down:
+                this.head.y++;
+                break;
+            case Direction.Left:
                 this.head.x--;
                 break;
         }
     };
-    Snake.prototype.up = function () {
-        this.direction = this.direction != 'down' ? 'up' : 'down';
-    };
-    Snake.prototype.left = function () {
-        this.direction = this.direction != 'right' ? 'left' : 'right';
-    };
-    Snake.prototype.down = function () {
-        this.direction = this.direction != 'up' ? 'down' : 'up';
-    };
-    Snake.prototype.right = function () {
-        this.direction = this.direction != 'left' ? 'right' : 'left';
+    Snake.prototype.randomAction = function () {
+        var rand = Math.random();
+        if (rand < 0.33)
+            return -1;
+        if (rand < 0.67)
+            return 0;
+        return 1;
     };
     return Snake;
+}());
+var Direction;
+(function (Direction) {
+    Direction[Direction["Up"] = 0] = "Up";
+    Direction[Direction["Right"] = 1] = "Right";
+    Direction[Direction["Down"] = 2] = "Down";
+    Direction[Direction["Left"] = 3] = "Left";
+})(Direction || (Direction = {}));
+var Controller = /** @class */ (function () {
+    function Controller() {
+        this._game = new Game;
+        //this._learner = new QLearner(0.1, 0.9);
+        this.exploration = 0.01;
+    }
+    Controller.prototype.step = function () {
+        var game = this._game;
+        //const learner = this._learner;
+        var state = game.getState();
+        //let action = learner.bestAction(state);
+        //if there is no best action try to explore
+        // if ((action==undefined) || (learner.getQValue(state, action) <= 0) || (Math.random() < this.exploration)) {
+        //     action = game.snake.randomAction();
+        // }
+        var action = game.snake.randomAction();
+        var reward = game.step(action);
+        var nextState = game.getState();
+        //learner.add(state, nextState, reward, action);
+        //make que q-learning algorithm number of iterations=10 or it could be another number
+        //learner.learn(100);
+    };
+    Controller.prototype.draw = function () {
+        this._game.drawField();
+        this._game.drawFruit();
+        this._game.snake.draw();
+    };
+    return Controller;
 }());
 var game = new Game;
