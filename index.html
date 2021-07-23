@@ -3,15 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <link rel="stylesheet" type="text/css" href="style.css">
+    <script type="text/javascript" src="seedrandom.js"></script>
+    <script type="text/javascript" src="q-learning.js"></script>
     <title>Snake</title>
 </head>
 <body>
     <canvas class='gameCanvas' id="canvas" width="510" height="510"></canvas>
+    <div>Макс. длина: <span id='max'></span></div>
+    <div>Текущая длина: <span id='current'></span></div>
+    <div>Время жизни: <span id='life'></span></div>
     <div>
-        <button id="start">Старт</button>
-        <button id="pause" disabled>Пауза</button>
-        <button id="restart">Сначала</button>
+        <button onclick="slow()">Медленно</button>
+        <button onclick="fast()">Быстро</button>
     </div>  
 <script type="text/javascript" src='game.js'></script>
+<script type="text/javascript">
+    const controller = new Controller();
+    const slowTime = 100;
+    const fastTime = 20;
+    let stepTime = slowTime;
+
+    let sid = setTimeout(slow, stepTime);
+
+    function stepController() {
+        controller.step();
+        controller.draw();
+    }
+    
+    function slow() {
+        stepTime = slowTime;
+        clearTimeout(sid);
+        stepController();
+        sid = setInterval(slow, stepTime);
+    }
+
+    function fast() {
+        stepTime = fastTime;
+        clearTimeout(sid);
+        stepController();
+        sid = setInterval(fast, stepTime);
+    }
+</script>
 </body>
 </html>
