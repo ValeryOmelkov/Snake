@@ -13,10 +13,7 @@ class Game {
     protected _speed: number = 100;
 
     protected _isStarted: boolean = false;
-    protected _directionChosen: boolean = false;
     protected _processInterval: number;
-    
-    protected _state: Array<number>;
     
     constructor() {
         this._canvas = document.getElementById('canvas');
@@ -32,23 +29,22 @@ class Game {
         this._restartBtn = document.getElementById('restart') as HTMLButtonElement;
         this._restartBtn.addEventListener('click', this._restart.bind(this));
         
-        document.addEventListener('keypress', this._onKeyPress.bind(this));
-        
         this._drawField();
         this._snake = new Snake(this._ctx, this._sizeCell, {x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2)});
         this._snake.draw();
         this._createFruit();
         this._drawFruit();
+
+        this._startGame();
     }
     
     protected _startGame() {
         this._pauseBtn.disabled = false;
         this._processInterval = setInterval (() => {
-            this._moveSnake();
+            this.step(this._snake.randomAction());
             this._drawField();
             this._drawFruit();
             this._snake.draw();
-            this._directionChosen = false;
         }, this._speed);
     }
     
@@ -61,86 +57,12 @@ class Game {
     protected _restart() {
         this._isStarted = false;
         clearInterval(this._processInterval);
-        this._directionChosen = false;
         this._pauseBtn.disabled = true;
         this._drawField();
         this._snake = new Snake(this._ctx, this._sizeCell, {x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2)});
         this._snake.draw();
         this._createFruit();
         this._drawFruit();
-    }
-
-    protected _getState(): Array<number>{
-        const head: Point = this._snake.head;
-        let wallState: Array<number> = []; // Значения от 0 до 1
-        let bodyState: Array<number> = new Array(8).fill(0); // Значения от 0 до 1 | 0 при отсутствии в поле видимости
-        let foodState: Array<number> = new Array(8).fill(0); // Значения от 0 до 1 | 0 при отсутствии в поле видимости
-        // Стенки
-        wallState.push(head.y);                                               // Вверх
-        wallState.push(Math.min(this._sizeX - head.x, head.y));               // Вверх-вправо
-        wallState.push(this._sizeX - head.x);                                 // Вправо
-        wallState.push(Math.min(this._sizeX - head.x, this._sizeY - head.y)); // Вниз-вправо 
-        wallState.push(this._sizeY - head.y);                                 // Вниз
-        wallState.push(Math.min(head.x, this._sizeY - head.y));               // Вниз-влево
-        wallState.push(head.x);                                               // Влево
-        wallState.push(Math.min(head.x, head.y));                             // Вверх-влево
-        wallState = wallState.map((n) => {return 1/n}); // Нормализация от 0 до 1
-        // Тело
-        let mpX: number; // Множитель для X
-        let mpY: number; // Множитель для Y
-        for(let i = 0; i < 8; i++){
-            mpX = (i > 4) ? -1 : ((i < 4 && i > 0) ? 1 : 0);
-            mpY = (i > 2 && i < 6) ? 1 : ((i > 6 || i < 2) ? -1 : 0);
-            let distance: number = 1;
-            while(!(head.x + (distance * mpX) < 0 || head.x + (distance * mpX) >= this._sizeX || head.y + (distance * mpY) < 0 || head.y + (distance * mpY) >= this._sizeY)){
-                if (this._snake.body.filter((item) => item.x === head.x + (distance * mpX) && item.y === head.y + (distance * mpY)).length > 0){
-                    bodyState[i] = distance;
-                    break;
-                }
-                distance++;
-            }
-        }
-        bodyState = bodyState.map((n) => {return n != 0 ? 1/n : 0})
-        // Еда
-        if (head.x === this._fruit.x){ // Верх/Низ
-            head.y > this._fruit.y ? foodState[0] = head.y - this._fruit.y : foodState[4] = this._fruit.y - head.y;
-        } else if (head.y === this._fruit.y){ // Лево/Право
-            head.x > this._fruit.x ? foodState[6] = head.x - this._fruit.x : foodState[2] = this._fruit.x - head.x;
-        } else if (head.x - this._fruit.x === head.y - this._fruit.y){ // Диагональ с лева направо, сверху вниз
-            head.x > this._fruit.x ? foodState[7] = Math.abs(head.x - this._fruit.x) : foodState[3] = Math.abs(head.x - this._fruit.x);
-        } else if (Math.abs(head.x - this._fruit.x) === Math.abs(head.y - this._fruit.y)){ // Диагональ с лева направо, снизу вверх
-            head.x > this._fruit.x ? foodState[5] = Math.abs(head.x - this._fruit.x) : foodState[1] = Math.abs(head.x - this._fruit.x);
-        }
-        foodState = foodState.map((n) => {return n != 0 ? 1/n : 0}); // Нормализация от 0 до 1
-
-        return [...wallState, ...bodyState, ...foodState];
-    }
-    
-    protected _onKeyPress(event: any): void {
-        if (this._directionChosen) return;
-
-        switch(event.code){
-            case 'KeyW': 
-                this._snake.up(); 
-                break;
-            case 'KeyA': 
-                this._snake.left();
-                break;
-            case 'KeyS': 
-                this._snake.down(); 
-                break;
-            case 'KeyD': 
-                this._snake.right(); 
-                break;
-            default: return;
-        }
-
-        this._directionChosen = true;
-        
-        if(!this._isStarted) {
-            this._startGame();
-            this._isStarted = true;
-        }
     }
 
     protected _drawField(): void {
@@ -170,21 +92,21 @@ class Game {
         this._ctx.fillRect(this._fruit.x * this._sizeCell, this._fruit.y * this._sizeCell, this._sizeCell, this._sizeCell);
     }
     
-    protected _moveSnake(): void {
-        const direction: string = this._snake.direction;
+    public step(action: number = 0): void {
+        this._snake.direction = this._snake.direction - action === 2 ? this._snake.direction : action;
         const head: Point = {...this._snake.head};
         
-        switch(direction) {
-            case 'up': 
+        switch(this._snake.direction) {
+            case Direction.Up: 
                 head.y--; 
                 break;
-            case 'down': 
+            case Direction.Down: 
                 head.y++; 
                 break;
-            case 'right': 
+            case Direction.Right: 
                 head.x++;
                 break;
-            case 'left': 
+            case Direction.Left: 
                 head.x--;
                 break;
         }
@@ -199,9 +121,9 @@ class Game {
         if (!this._checkIsAlive(head)) {
             this._endGame();
             return;
-        } else {
-            this._snake.move(growing);
         }
+
+        this._snake.move(growing);
     }
     
     protected _checkFruit(head: Point): boolean {
@@ -238,7 +160,7 @@ class Snake {
     protected _sizeCell: number;
     public head: Point;
     public body: Point[] = [];
-    public direction: string;
+    public direction: Direction = Direction.Up;
     
     constructor(context: any, size: number, startPoint: Point) {
         this._ctx = context;
@@ -261,41 +183,40 @@ class Snake {
         if (!growing) this.body.pop();
         
         switch(this.direction) {
-            case 'up': 
+            case Direction.Up: 
                 this.head.y--; 
                 break;
-            case 'down': 
+            case Direction.Down: 
                 this.head.y++; 
                 break;
-            case 'right': 
+            case Direction.Right: 
                 this.head.x++; 
                 break;
-            case 'left': 
+            case Direction.Left: 
                 this.head.x--; 
                 break;
         }
     }
-    
-    public up(): void{
-        this.direction = this.direction != 'down' ? 'up' : 'down';
-    }
-    
-    public left(): void{
-        this.direction = this.direction != 'right' ? 'left' : 'right';
-    }
-    
-    public down(): void{
-        this.direction = this.direction != 'up' ? 'down' : 'up';
-    }
-    
-    public right(): void{
-        this.direction = this.direction != 'left' ? 'right' : 'left';
+
+    public randomAction(): number{
+        const random: number = Math.random();
+        if (random < 0.25) return 0;
+        if (random < 0.5) return 1;
+        if (random < 0.75) return 2;
+        return 3;
     }
 }
 
 interface Point {
     x: number;
     y: number;
+}
+
+enum Direction {
+    Up = 0,
+    Right = 1,
+    Down = 2,
+    Left = 3
 }
 
 const game = new Game;
