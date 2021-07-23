@@ -1,3 +1,6 @@
+import {QLearner} from "./q-learning.js"
+
+"use strict";
 var __assign = (this && this.__assign) || function () {
     __assign = Object.assign || function(t) {
         for (var s, i = 1, n = arguments.length; i < n; i++) {
@@ -14,17 +17,25 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from) {
         to[j] = from[i];
     return to;
 };
+
 var Game = /** @class */ (function () {
     function Game() {
-        this._sizeX = 9;
-        this._sizeY = 9;
+        this._sizeX = 8;
+        this._sizeY = 8;
         this._sizeCell = 50;
+        this._life = 0;
+        this._max = 1;
+        this._curr = 1;
+        this._epoch = 0;
         this._canvas = document.getElementById('canvas');
         this._canvas.width = this._sizeX * this._sizeCell;
         this._canvas.height = this._sizeY * this._sizeCell;
         this._canvas.style.width = this._sizeX * this._sizeCell + 'px';
         this._canvas.style.height = this._sizeY * this._sizeCell + 'px';
         this._ctx = this._canvas.getContext('2d');
+        this._lifeDiv = document.getElementById('life');
+        this._maxDiv = document.getElementById('max');
+        this._currDiv = document.getElementById('current');
         this.drawField();
         this.snake = new Snake(this._ctx, this._sizeCell, { x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2) });
         this.snake.draw();
@@ -32,55 +43,48 @@ var Game = /** @class */ (function () {
         this.drawFruit();
     }
     Game.prototype.getState = function () {
-        var head = this.snake.head;
-        var wallState = []; // Значения от 0 до 1
-        var bodyState = new Array(8).fill(0); // Значения от 0 до 1 | 0 при отсутствии в поле видимости
-        var foodState = new Array(8).fill(0); // Значения от 0 до 1 | 0 при отсутствии в поле видимости
-        // Стенки
-        wallState.push(head.y); // Вверх
-        wallState.push(Math.min(this._sizeX - head.x, head.y)); // Вверх-вправо
-        wallState.push(this._sizeX - head.x); // Вправо
-        wallState.push(Math.min(this._sizeX - head.x, this._sizeY - head.y)); // Вниз-вправо 
-        wallState.push(this._sizeY - head.y); // Вниз
-        wallState.push(Math.min(head.x, this._sizeY - head.y)); // Вниз-влево
-        wallState.push(head.x); // Влево
-        wallState.push(Math.min(head.x, head.y)); // Вверх-влево
-        wallState = wallState.map(function (n) { return 1 / n; }); // Нормализация от 0 до 1
-        // Тело
-        var mpX; // Множитель для X
-        var mpY; // Множитель для Y
-        var _loop_1 = function (i) {
-            mpX = (i > 4) ? -1 : ((i < 4 && i > 0) ? 1 : 0);
-            mpY = (i > 2 && i < 6) ? 1 : ((i > 6 || i < 2) ? -1 : 0);
-            var distance = 1;
-            while (!(head.x + (distance * mpX) < 0 || head.x + (distance * mpX) >= this_1._sizeX || head.y + (distance * mpY) < 0 || head.y + (distance * mpY) >= this_1._sizeY)) {
-                if (this_1.snake.body.filter(function (item) { return item.x === head.x + (distance * mpX) && item.y === head.y + (distance * mpY); }).length > 0) {
-                    bodyState[i] = distance;
-                    break;
-                }
-                distance++;
-            }
-        };
-        var this_1 = this;
-        for (var i = 0; i < 8; i++) {
-            _loop_1(i);
+        var head = __assign({}, this.snake.head);
+        var leftPoint;
+        var straightPoint;
+        var rightPoint;
+        var directions = [false, false, false, false];
+        directions[this.snake.direction] = true;
+        switch (this.snake.direction) {
+            case Direction.Up:
+                leftPoint = {x: head.x - 1, y: head.y};
+                straightPoint = {x: head.x, y: head.y - 1};
+                rightPoint = {x: head.x + 1, y: head.y};
+                break;
+            case Direction.Right:
+                leftPoint = {x: head.x, y: head.y - 1};
+                straightPoint = {x: head.x + 1, y: head.y};
+                rightPoint = {x: head.x, y: head.y + 1};
+                break;
+            case Direction.Down:
+                leftPoint = {x: head.x + 1, y: head.y};
+                straightPoint = {x: head.x, y: head.y + 1};
+                rightPoint = {x: head.x - 1, y: head.y};
+                break;
+            case Direction.Left:
+                leftPoint = {x: head.x, y: head.y + 1};
+                straightPoint = {x: head.x - 1, y: head.y};
+                rightPoint = {x: head.x, y: head.y - 1};
+                break;
         }
-        bodyState = bodyState.map(function (n) { return n != 0 ? 1 / n : 0; });
-        // Еда
-        if (head.x === this._fruit.x) { // Верх/Низ
-            head.y > this._fruit.y ? foodState[0] = head.y - this._fruit.y : foodState[4] = this._fruit.y - head.y;
-        }
-        else if (head.y === this._fruit.y) { // Лево/Право
-            head.x > this._fruit.x ? foodState[6] = head.x - this._fruit.x : foodState[2] = this._fruit.x - head.x;
-        }
-        else if (head.x - this._fruit.x === head.y - this._fruit.y) { // Диагональ с лева направо, сверху вниз
-            head.x > this._fruit.x ? foodState[7] = Math.abs(head.x - this._fruit.x) : foodState[3] = Math.abs(head.x - this._fruit.x);
-        }
-        else if (Math.abs(head.x - this._fruit.x) === Math.abs(head.y - this._fruit.y)) { // Диагональ с лева направо, снизу вверх
-            head.x > this._fruit.x ? foodState[5] = Math.abs(head.x - this._fruit.x) : foodState[1] = Math.abs(head.x - this._fruit.x);
-        }
-        foodState = foodState.map(function (n) { return n != 0 ? 1 / n : 0; }); // Нормализация от 0 до 1
-        return __spreadArray(__spreadArray(__spreadArray([], wallState), bodyState), foodState);
+
+        var dangerLeft = this._checkIsAlive(leftPoint);
+        var dangerStraight = this._checkIsAlive(straightPoint);
+        var dangerRight = this._checkIsAlive(rightPoint);
+
+        var x = head.x - this._fruit.x;
+        var y = head.y - this._fruit.y;
+
+        var state = [
+            dangerLeft, dangerStraight, dangerRight,
+            ...directions,
+            y > 0, x < 0, y < 0, x > 0
+        ]
+        return state;
     };
     Game.prototype.step = function (action) {
         if (action === void 0) { action = 0; }
@@ -112,6 +116,9 @@ var Game = /** @class */ (function () {
         // Проверям, если новая голова ударилась
         if (!this._checkIsAlive(head)) {
             reward = -1000;
+            this._life = 0;
+            this._curr = 1;
+            this._epoch++;
             this._endGame(); // Если змея ударилась, вызываем эту функцию
             return reward; // и выходим
         }
@@ -120,9 +127,15 @@ var Game = /** @class */ (function () {
             reward = 100;
             this._createFruit();
             this.drawFruit();
+            this._curr++;
         }
         // Ходим змейкой
         this.snake.move(reward === 100);
+        this._max = this._curr > this._max ? this._curr : this._max;
+        this._life++;
+        this._currDiv.innerHTML = this._curr.toString();
+        this._lifeDiv.innerHTML = this._life.toString();
+        this._maxDiv.innerHTML = this._max.toString() + '    Игр: ' + this._epoch.toString();
         return reward;
     };
     Game.prototype.drawField = function () {
@@ -236,24 +249,23 @@ var Direction;
 var Controller = /** @class */ (function () {
     function Controller() {
         this._game = new Game;
-        //this._learner = new QLearner(0.1, 0.9);
+        this._learner = new QLearner(0.1, 0.9);
         this.exploration = 0.01;
     }
     Controller.prototype.step = function () {
         var game = this._game;
-        //const learner = this._learner;
+        var learner = this._learner;
         var state = game.getState();
-        //let action = learner.bestAction(state);
+        var action = Number(learner.bestAction(state));
         //if there is no best action try to explore
-        // if ((action==undefined) || (learner.getQValue(state, action) <= 0) || (Math.random() < this.exploration)) {
-        //     action = game.snake.randomAction();
-        // }
-        var action = game.snake.randomAction();
+        if ((action == undefined) || (learner.getQValue(state, action) <= 0) || (Math.random() < this.exploration)) {
+            action = game.snake.randomAction();
+        }
         var reward = game.step(action);
         var nextState = game.getState();
-        //learner.add(state, nextState, reward, action);
+        learner.add(state, nextState, reward, action);
         //make que q-learning algorithm number of iterations=10 or it could be another number
-        //learner.learn(100);
+        learner.learn(100);
     };
     Controller.prototype.draw = function () {
         this._game.drawField();
@@ -262,4 +274,32 @@ var Controller = /** @class */ (function () {
     };
     return Controller;
 }());
-var game = new Game;
+var controller = new Controller;
+var slowTime = 100;
+var fastTime = 50;
+var stepTime = slowTime;
+var sid = setTimeout(slow, stepTime);
+function stepController() {
+    controller.step();
+    controller.draw();
+}
+function slow() {
+    stepTime = slowTime;
+    clearTimeout(sid);
+    stepController();
+    sid = setInterval(slow, stepTime);
+}
+function fast() {
+    stepTime = fastTime;
+    clearTimeout(sid);
+    stepController();
+    sid = setInterval(fast, stepTime);
+}
+function show() {
+    console.log(controller._learner.statesList)
+}
+
+document.getElementById('fast').addEventListener('click', fast)
+document.getElementById('slow').addEventListener('click', slow)
+document.getElementById('show').addEventListener('click', show)
+//const game = new Game;

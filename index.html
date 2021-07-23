@@ -7,13 +7,19 @@
 </head>
 <body>
     <canvas class='gameCanvas' id="canvas" width="510" height="510"></canvas>
+    <div>Макс. длина: <span id='max'></span></div>
+    <div>Текущая длина: <span id='current'></span></div>
+    <div>Время жизни: <span id='life'></span></div>
     <div>
-        <button onclick="slow()">Медленно</button>
-        <button onclick="fast()">Быстро</button>
+        <button id="slow">Медленно</button>
+        <button id="fast">Быстро</button>
+        <button id="show">show</button>
     </div>  
-<script type="text/javascript" src='game.js'></script>
-<script type="text/javascript">
-    const controller = new Controller();
+<script>var exports = {};</script>
+<script type="module" src='game.js'></script>
+<script type="module" src='q-learning.js'></script>
+<!-- <script type="text/javascript">
+    const controller = new Controller;
     const slowTime = 100;
     const fastTime = 50;
     let stepTime = slowTime;
@@ -38,6 +44,6 @@
         stepController();
         sid = setInterval(fast, stepTime);
     }
-</script>
+</script> -->
 </body>
 </html>

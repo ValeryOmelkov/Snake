@@ -1,3 +1,6 @@
+import {QLearner} from "./q-learning.js";
+
+
 class Game {
     protected _canvas: any;
     protected _ctx: any;
@@ -245,38 +248,36 @@ enum Direction {
 
 class Controller {
     protected _game: Game;
-    //protected _learner: QLearner;
+    protected _learner: QLearner;
     public exploration;
 
     constructor() {
         this._game = new Game;
-        //this._learner = new QLearner(0.1, 0.9);
+        this._learner = new QLearner(0.1, 0.9);
         this.exploration = 0.01;
     }
 
     step() {
         const game = this._game;
-        //const learner = this._learner;
+        const learner = this._learner;
 
         let state = game.getState();
 
-        //let action = learner.bestAction(state);
+        let action: number = Number(learner.bestAction(state));
 
         //if there is no best action try to explore
-        // if ((action==undefined) || (learner.getQValue(state, action) <= 0) || (Math.random() < this.exploration)) {
-        //     action = game.snake.randomAction();
-        // }
-
-        let action = game.snake.randomAction();
+        if ((action==undefined) || (learner.getQValue(state, action) <= 0) || (Math.random() < this.exploration)) {
+            action = game.snake.randomAction();
+        }
 
         let reward: number = game.step(action);
 
         let nextState = game.getState();
 
-        //learner.add(state, nextState, reward, action);
+        learner.add(state, nextState, reward, action);
 
         //make que q-learning algorithm number of iterations=10 or it could be another number
-        //learner.learn(100);
+        learner.learn(100);
     }
 
     draw(): void {
@@ -286,4 +287,30 @@ class Controller {
     }
 }
 
-const game = new Game;
+const controller = new Controller;
+const slowTime = 100;
+const fastTime = 50;
+let stepTime = slowTime;
+
+let sid = setTimeout(slow, stepTime);
+
+function stepController() {
+    controller.step();
+    controller.draw();
+}
+    
+function slow() {
+    stepTime = slowTime;
+    clearTimeout(sid);
+    stepController();
+    sid = setInterval(slow, stepTime);
+}
+
+function fast() {
+    stepTime = fastTime;
+    clearTimeout(sid);
+    stepController();
+    sid = setInterval(fast, stepTime);
+}
+
+//const game = new Game;
