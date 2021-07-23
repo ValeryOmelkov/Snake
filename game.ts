@@ -3,14 +3,16 @@ class Game {
     protected _ctx: any;
     protected _pauseBtn: HTMLButtonElement;
     protected _restartBtn: HTMLButtonElement;
+    protected _lifeDiv: HTMLElement;
 
     protected _snake: Snake;
     protected _fruit: Point;
     
-    protected _sizeX: number = 15;
-    protected _sizeY: number = 15;
+    protected _sizeX: number = 20;
+    protected _sizeY: number = 20;
     protected _sizeCell: number = 30;
-    protected _speed: number = 100;
+    protected _speed: number = 200;
+    protected _life: number = 40;
 
     protected _isStarted: boolean = false;
     protected _processInterval: number;
@@ -28,20 +30,22 @@ class Game {
         
         this._restartBtn = document.getElementById('restart') as HTMLButtonElement;
         this._restartBtn.addEventListener('click', this._restart.bind(this));
+
+        this._lifeDiv = document.getElementById('life');
         
         this._drawField();
         this._snake = new Snake(this._ctx, this._sizeCell, {x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2)});
         this._snake.draw();
         this._createFruit();
         this._drawFruit();
-
+        this.DFS();
         this._startGame();
     }
     
     protected _startGame() {
         this._pauseBtn.disabled = false;
         this._processInterval = setInterval (() => {
-            this.step(this._snake.randomAction());
+            this.step(this.DFS());
             this._drawField();
             this._drawFruit();
             this._snake.draw();
@@ -93,9 +97,11 @@ class Game {
     }
     
     public step(action: number = 0): void {
-        this._snake.direction = this._snake.direction - action === 2 ? this._snake.direction : action;
+        this._life--;
+        this._lifeDiv.textContent = this._life.toString();
+        this._snake.direction = Math.abs(this._snake.direction - action) === 2 ? this._snake.direction : action;
         const head: Point = {...this._snake.head};
-        
+
         switch(this._snake.direction) {
             case Direction.Up: 
                 head.y--; 
@@ -110,20 +116,123 @@ class Game {
                 head.x--;
                 break;
         }
-        
-        let growing: boolean = false;
-        if (this._checkFruit(head)) {
-            this._createFruit();
-            this._drawFruit();
-            growing = true;
-        }
-        
+
         if (!this._checkIsAlive(head)) {
             this._endGame();
             return;
         }
 
+        if(this._life <= 0){
+            this._endGame();
+            return;
+        }
+        
+        let growing: boolean = false;
+        if (this._checkFruit(head)) {
+            this._createFruit();
+            this._drawFruit();
+            this._life = 40;
+            growing = true;
+        }
+
         this._snake.move(growing);
+    }
+
+    protected DFS(): number{
+        const fruit: Point = this._fruit;
+        const head: Point = this._snake.head;
+        let field: Array<Array<number | undefined>> = new Array(this._sizeY); 
+        for(let i = 0; i < field.length; i++){
+            field[i] = new Array(this._sizeX).fill(100);
+        }
+        field[fruit.y][fruit.x] = 0;        
+        field[head.y][head.x] = 50;
+        for(let item of this._snake.body){
+            field[item.y][item.x] = 150;
+        }
+
+        let mainArray: Array<Point> = [fruit];
+        let assistArray: Array<Point> = [];
+        let findFood: boolean = false;
+        const offset: Array<number> = [-1, 1, 1, -1];
+        let num: number = 1;
+        let offY: number;
+        let offX: number;
+        while(!findFood){
+            assistArray = mainArray;
+            mainArray = [];
+            for(let item of assistArray){
+                for(let i = 0; i < 4; i++){ 
+                    if(i % 2 === 0){ 
+                        offY = offset[i];
+                        offX = 0;
+                    } else {
+                        offY = 0;
+                        offX = offset[i];
+                    } 
+                    if((item.y + offY || item.x + offX) < 0 || (item.y + offY >= this._sizeY || item.x + offX >= this._sizeX)){
+                        continue;
+                    }
+                    if(field[item.y + offY][item.x + offX] === 150){
+                        continue;
+                    }
+                    if (field[item.y + offY][item.x + offX] === 100 && field[item.y + offY][item.x + offX] != 0 || field[item.y + offY][item.x + offX] === 50) {
+                        if (item.y + offY === head.y && item.x + offX === head.x) {
+                            findFood = true;
+                        }
+                        field[item.y + offY][item.x + offX] = num;
+                        let x = item.x + offX;
+                        let y = item.y + offY;
+                        mainArray.push({x, y} as Point);
+                    }
+                }
+            }
+            num++;
+            if(num > (this._sizeY*1.5)) break;
+        }
+
+        console.log(field);
+        console.log(num);
+        if(!findFood){
+            console.log('Рандом')
+            return this._snake.randomAction();
+        }
+        // console.log('1');
+        // console.log(field);
+
+        let currentPoint: Point = head;
+        const way: Array<Point> = [];
+        // while(!(currentPoint.x === fruit.x && currentPoint.y === fruit.y)){
+            for(let i = 0; i < 4; i++){
+                if(i % 2 === 0){ 
+                    offY = offset[i];
+                    offX = 0;
+                } else {
+                    offY = 0;
+                    offX = offset[i];
+                }
+                const item: Point = {x:(currentPoint.x + offX), y:(currentPoint.y + offY)};
+                if(item.x < 0 || item.y < 0 || item.x >= this._sizeX || item.y >= this._sizeY){
+                    continue;
+                }
+                // console.log(field[item.y][item.x]);
+                // console.log(field[currentPoint.y][currentPoint.x]);
+                if(field[item.y][item.x] < field[currentPoint.y][currentPoint.x]){
+                    way.push(item);
+                    currentPoint = item;
+                    break;
+                }
+            }
+        //}
+        
+        const nearestPoint: Point = way.shift();
+        const dirX: number = nearestPoint.x - head.x;
+        const dirY: number = nearestPoint.y - head.y;
+
+        if (dirX === 0 && dirY === -1) return 0;
+        else if (dirX === 1 && dirY === 0) return 1;
+        else if (dirX === 0 && dirY === 1) return 2;
+        else return 3;
     }
     
     protected _checkFruit(head: Point): boolean {
@@ -149,9 +258,14 @@ class Game {
     }
     
     protected _endGame(): void {
-        clearInterval(this._processInterval);
+        this._life = 40;
+        this._snake = new Snake(this._ctx, this._sizeCell, {x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2)});
+        this._drawField();
+        this._snake.draw();
+        this._createFruit();
+        this._drawFruit();
         this._pauseBtn.disabled = true;
-        alert('Поражение!');
+        console.log('Поражение!');
     }
 }
 
