@@ -1,20 +1,35 @@
 class Game {
     constructor() {
-        this._sizeX = 15;
-        this._sizeY = 15;
+        this._sizeX = 20;
+        this._sizeY = 20;
         this._sizeCell = 30;
-        this._speed = 100;
+        this._speed = 50;
+        this._life = 100;
         this._isStarted = false;
+        this.steps = 0;
+        this.stepsNeeded = 25000; // Шагов перед обучением
+        this._trainData = [];
         this._canvas = document.getElementById('canvas');
         this._canvas.width = this._sizeX * this._sizeCell;
         this._canvas.height = this._sizeY * this._sizeCell;
         this._canvas.style.width = this._sizeX * this._sizeCell + 'px';
         this._canvas.style.height = this._sizeY * this._sizeCell + 'px';
         this._ctx = this._canvas.getContext('2d');
+        this._startBtn = document.getElementById('start');
+        this._startBtn.addEventListener('click', this._startGame.bind(this));
         this._pauseBtn = document.getElementById('pause');
         this._pauseBtn.addEventListener('click', this._pause.bind(this));
         this._restartBtn = document.getElementById('restart');
         this._restartBtn.addEventListener('click', this._restart.bind(this));
+        this._lifeDiv = document.getElementById('life');
+        const config = {
+            inputSize: 24,
+            hiddenLayers: [12],
+            outputSize: 4,
+            activation: 'relu',
+            learningRate: 0.1,
+        };
+        this._net = new brain.NeuralNetwork(config);
         this._drawField();
         this._snake = new Snake(this._ctx, this._sizeCell, { x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2) });
         this._snake.draw();
@@ -25,7 +40,7 @@ class Game {
     _startGame() {
         this._pauseBtn.disabled = false;
         this._processInterval = setInterval(() => {
-            this.step(this._snake.randomAction());
+            this.step(this.steps <= this.stepsNeeded ? this.DFS() : this.NetAction());
             this._drawField();
             this._drawFruit();
             this._snake.draw();
@@ -45,6 +60,7 @@ class Game {
         this._snake.draw();
         this._createFruit();
         this._drawFruit();
+        this._startGame();
     }
     _drawField() {
         for (let y = 0; y < this._sizeY; y++) {
@@ -70,8 +86,69 @@ class Game {
         this._ctx.fillStyle = '#AA0000';
         this._ctx.fillRect(this._fruit.x * this._sizeCell, this._fruit.y * this._sizeCell, this._sizeCell, this._sizeCell);
     }
-    step(action = 0) {
-        this._snake.direction = this._snake.direction - action === 2 ? this._snake.direction : action;
+    _getState() {
+        const head = this._snake.head;
+        let wallState = []; // Значения от 0 до 1
+        let bodyState = new Array(8).fill(0); // Значения от 0 до 1 | 0 при отсутствии в поле видимости
+        let foodState = new Array(8).fill(0); // Значения от 0 до 1 | 0 при отсутствии в поле видимости
+        // Стенки
+        wallState.push(head.y); // Вверх
+        wallState.push(Math.min(this._sizeX - head.x, head.y)); // Вверх-вправо
+        wallState.push(this._sizeX - head.x); // Вправо
+        wallState.push(Math.min(this._sizeX - head.x, this._sizeY - head.y)); // Вниз-вправо 
+        wallState.push(this._sizeY - head.y); // Вниз
+        wallState.push(Math.min(head.x, this._sizeY - head.y)); // Вниз-влево
+        wallState.push(head.x); // Влево
+        wallState.push(Math.min(head.x, head.y)); // Вверх-влево
+        wallState = wallState.map((n) => { return n != 0 ? Number((1 / n).toFixed(2)) : 0; }); // Нормализация от 0 до 1
+        // Тело
+        let mpX; // Множитель для X
+        let mpY; // Множитель для Y
+        for (let i = 0; i < 8; i++) {
+            mpX = (i > 4) ? -1 : ((i < 4 && i > 0) ? 1 : 0);
+            mpY = (i > 2 && i < 6) ? 1 : ((i > 6 || i < 2) ? -1 : 0);
+            let distance = 1;
+            while (!(head.x + (distance * mpX) < 0 || head.x + (distance * mpX) >= this._sizeX || head.y + (distance * mpY) < 0 || head.y + (distance * mpY) >= this._sizeY)) {
+                if (this._snake.body.filter((item) => item.x === head.x + (distance * mpX) && item.y === head.y + (distance * mpY)).length > 0) {
+                    bodyState[i] = distance;
+                    break;
+                }
+                distance++;
+            }
+        }
+        bodyState = bodyState.map((n) => { return n != 0 ? Number((1 / n).toFixed(2)) : 0; });
+        // Еда
+        if (head.x === this._fruit.x) { // Верх/Низ
+            head.y > this._fruit.y ? foodState[0] = head.y - this._fruit.y : foodState[4] = this._fruit.y - head.y;
+        }
+        else if (head.y === this._fruit.y) { // Лево/Право
+            head.x > this._fruit.x ? foodState[6] = head.x - this._fruit.x : foodState[2] = this._fruit.x - head.x;
+        }
+        else if (head.x - this._fruit.x === head.y - this._fruit.y) { // Диагональ с лева направо, сверху вниз
+            head.x > this._fruit.x ? foodState[7] = Math.abs(head.x - this._fruit.x) : foodState[3] = Math.abs(head.x - this._fruit.x);
+        }
+        else if (Math.abs(head.x - this._fruit.x) === Math.abs(head.y - this._fruit.y)) { // Диагональ с лева направо, снизу вверх
+            head.x > this._fruit.x ? foodState[5] = Math.abs(head.x - this._fruit.x) : foodState[1] = Math.abs(head.x - this._fruit.x);
+        }
+        foodState = foodState.map((n) => { return n != 0 ? Number((1 / n).toFixed(2)) : 0; }); // Нормализация от 0 до 1
+        return [...wallState, ...bodyState, ...foodState];
+    }
+    step(action) {
+        console.log(this.steps);
+        if (this.steps < this.stepsNeeded) {
+            this._setTrainData(this._getState(), this.DFS());
+        }
+        this.steps++;
+        if (this.steps === this.stepsNeeded) {
+            this.NetTrain();
+        }
+        this._life--;
+        this._lifeDiv.textContent = this._life.toString();
+        const max = Math.max.apply(null, action);
+        let indexMax = action.indexOf(max);
+        if (indexMax === -1)
+            indexMax = 0;
+        this._snake.direction = Math.abs(this._snake.direction - indexMax) === 2 ? this._snake.direction : indexMax;
         const head = Object.assign({}, this._snake.head);
         switch (this._snake.direction) {
             case Direction.Up:
@@ -87,17 +164,164 @@ class Game {
                 head.x--;
                 break;
         }
-        let growing = false;
-        if (this._checkFruit(head)) {
-            this._createFruit();
-            this._drawFruit();
-            growing = true;
-        }
         if (!this._checkIsAlive(head)) {
             this._endGame();
             return;
         }
+        if (this._life <= 0) {
+            this._endGame();
+            return;
+        }
+        let growing = false;
+        if (this._checkFruit(head)) {
+            this._createFruit();
+            this._drawFruit();
+            this._life = 100;
+            growing = true;
+        }
         this._snake.move(growing);
+    }
+    // Получение действия от сети
+    NetAction() {
+        const action = this._net.run(this._getState());
+        console.log(action);
+        return action;
+    }
+    // Сбор данных
+    _setTrainData(inp, out) {
+        this._trainData.push({ input: inp, output: out });
+    }
+    // Обучение сети
+    NetTrain() {
+        this._pause();
+        console.log('Обучение...');
+        this._net.train(this._trainData, {
+            log: true,
+            logPeriod: 100,
+            errorThresh: 0.005,
+            iterations: 10000,
+            timeout: 600000,
+            learningRate: 0.1
+        });
+        console.log('Обучилось!');
+        this._restart();
+    }
+    DFS() {
+        const fruit = this._fruit;
+        const head = this._snake.head;
+        let field = new Array(this._sizeY);
+        for (let i = 0; i < field.length; i++) {
+            field[i] = new Array(this._sizeX).fill(100);
+        }
+        field[fruit.y][fruit.x] = 80;
+        field[head.y][head.x] = 0;
+        for (let item of this._snake.body) {
+            field[item.y][item.x] = 150;
+        }
+        let mainArray = [head];
+        let assistArray = [];
+        let findFood = false;
+        const offset = [-1, 1, 1, -1];
+        let num = 1;
+        let offY;
+        let offX;
+        while (!findFood) {
+            assistArray = mainArray;
+            mainArray = [];
+            for (let item of assistArray) {
+                for (let i = 0; i < 4; i++) {
+                    if (i % 2 === 0) {
+                        offY = offset[i];
+                        offX = 0;
+                    }
+                    else {
+                        offY = 0;
+                        offX = offset[i];
+                    }
+                    if ((item.y + offY || item.x + offX) < 0 || (item.y + offY >= this._sizeY || item.x + offX >= this._sizeX)) {
+                        continue;
+                    }
+                    if (field[item.y + offY][item.x + offX] === 150) {
+                        continue;
+                    }
+                    if (field[item.y + offY][item.x + offX] === 100 && field[item.y + offY][item.x + offX] != 0 || field[item.y + offY][item.x + offX] === 80) {
+                        if (item.y + offY === fruit.y && item.x + offX === fruit.x) {
+                            findFood = true;
+                        }
+                        field[item.y + offY][item.x + offX] = num;
+                        let x = item.x + offX;
+                        let y = item.y + offY;
+                        mainArray.push({ x, y });
+                    }
+                }
+            }
+            num++;
+            if (num > (this._sizeY * 3))
+                break;
+        }
+        let currentPoint = fruit;
+        const way = [fruit];
+        let findWay = false;
+        while (!(currentPoint.x === head.x && currentPoint.y === head.y)) {
+            let countWay = 0;
+            for (let i = 0; i < 4; i++) {
+                if (i % 2 === 0) {
+                    offY = offset[i];
+                    offX = 0;
+                }
+                else {
+                    offY = 0;
+                    offX = offset[i];
+                }
+                const item = { x: (currentPoint.x + offX), y: (currentPoint.y + offY) };
+                if (item.x < 0 || item.y < 0 || item.x >= this._sizeX || item.y >= this._sizeY) {
+                    continue;
+                }
+                if (field[item.y][item.x] < field[currentPoint.y][currentPoint.x]) {
+                    way.push(item);
+                    currentPoint = item;
+                    findWay = true;
+                    countWay++;
+                    break;
+                }
+            }
+            if (countWay === 0) {
+                findWay = false;
+                break;
+            }
+        }
+        way.pop();
+        let nearestPoint;
+        let dirX;
+        let dirY;
+        if (findWay) {
+            nearestPoint = way.pop();
+            dirX = nearestPoint.x - head.x;
+            dirY = nearestPoint.y - head.y;
+        }
+        else {
+            for (let i = 0; i < 4; i++) {
+                offY = (i % 2 === 0) ? offset[i] : 0;
+                offX = (i % 2 === 0) ? 0 : offset[i];
+                const item = { x: (head.x + offX), y: (head.y + offY) };
+                if (item.x < 0 || item.y < 0 || item.x >= this._sizeX || item.y >= this._sizeY) {
+                    continue;
+                }
+                if (field[item.y][item.x] > field[head.y][head.x] && field[item.y][item.x] < 100) {
+                    dirX = item.x - head.x;
+                    dirY = item.y - head.y;
+                    break;
+                }
+            }
+        }
+        if (dirX === 0 && dirY === -1)
+            return [1, 0, 0, 0];
+        else if (dirX === 1 && dirY === 0)
+            return [0, 1, 0, 0];
+        else if (dirX === 0 && dirY === 1)
+            return [0, 0, 1, 0];
+        else
+            return [0, 0, 0, 1];
     }
     _checkFruit(head) {
         if (head.x === this._fruit.x && head.y === this._fruit.y) {
@@ -119,9 +343,14 @@ class Game {
         return true;
     }
     _endGame() {
-        clearInterval(this._processInterval);
+        this._life = 100;
+        this._snake = new Snake(this._ctx, this._sizeCell, { x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2) });
+        this._drawField();
+        this._snake.draw();
+        this._createFruit();
+        this._drawFruit();
         this._pauseBtn.disabled = true;
-        alert('Поражение!');
+        console.log('Поражение!');
     }
 }
 class Snake {
@@ -131,6 +360,7 @@ class Snake {
         this._ctx = context;
         this._sizeCell = size;
         this.head = startPoint;
+        this.body.push({ x: this.head.x, y: (this.head.y + 1) }, { x: this.head.x, y: (this.head.y + 2) });
     }
     draw() {
         this._ctx.fillStyle = '#008800';
@@ -163,12 +393,12 @@ class Snake {
     randomAction() {
         const random = Math.random();
         if (random < 0.25)
-            return 0;
+            return [1, 0, 0, 0];
         if (random < 0.5)
-            return 1;
+            return [0, 1, 0, 0];
         if (random < 0.75)
-            return 2;
-        return 3;
+            return [0, 0, 1, 0];
+        return [0, 0, 0, 1];
     }
 }
 var Direction;
