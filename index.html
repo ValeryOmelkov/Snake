@@ -4,17 +4,37 @@
     <meta charset="UTF-8">
     <link rel="stylesheet" type="text/css" href="style.css">
     <script src="https://unpkg.com/brain.js@1.0.0-rc.3/browser.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/synaptic/1.1.4/synaptic.js"></script>
     <title>Snake</title>
 </head>
 <body>
-    <canvas class='gameCanvas' id="canvas" width="510" height="510"></canvas>
-    <div>Жизни: <span id='life'></span></div>
-    <div>
+    <div class='container'>
+        <div class='box'>
+            <div class="content">
+                <h3 class="text">Алгоритм</h3>
+                <p class="text">Макс. длина: <span id='MaxLengthA'>0</span></p>
+                <p class="text">Длина: <span id='LengthA'>0</span></p>
+                <p class="text">Кол-во игр: <span id='CountGameA'>0</span></p>
+                <p class="text">Жизни: <span id='LifeA'>0</span></p>
+            </div>
+            <div class="content">
+                <canvas class='gameCanvas' id="canvas"></canvas>
+            </div>
+            <div class="content">
+                <h3 class="text">Нейросеть</h3>
+                <p class="text">Макс. длина: <span id='MaxLengthNN'>0</span></p>
+                <p class="text">Длина: <span id='LengthNN'>0</span></p>
+                <p class="text">Кол-во игр: <span id='CountGameNN'>0</span></p>
+                <p class="text">Жизни: <span id='LifeNN'>0</span></p>
+            </div>
+        </div>
+    </div>
+    <div class='buttons'>
         <button id="start">Старт</button>
         <button id="pause" disabled>Пауза</button>
         <button id="restart">Сначала</button>
     </div>  
+    <input type='file' id='file'>
+    <div id='json'></div>
 <script type="text/javascript" src='game.js'></script>
 </body>
 </html>
