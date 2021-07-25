@@ -9,6 +9,10 @@ class Game {
         this.steps = 0;
         this.stepsNeeded = 25000; // Шагов перед обучением
         this._trainData = [];
+        this._hamiltonPath = [];
+        this.StepsCountAfterCalculatePath = 0;
+        this.InvertHamiltonPath = false;
+        this.TempPath = [];
         this._canvas = document.getElementById('canvas');
         this._canvas.width = this._sizeX * this._sizeCell;
         this._canvas.height = this._sizeY * this._sizeCell;
@@ -22,6 +26,7 @@ class Game {
         this._restartBtn = document.getElementById('restart');
         this._restartBtn.addEventListener('click', this._restart.bind(this));
         this._lifeDiv = document.getElementById('life');
+        this._createHamiltonPath();
         const config = {
             inputSize: 24,
             hiddenLayers: [12],
@@ -35,26 +40,28 @@ class Game {
         this._snake.draw();
         this._createFruit();
         this._drawFruit();
+        this._calculatePath();
         this._startGame();
     }
     _startGame() {
         this._pauseBtn.disabled = false;
         this._processInterval = setInterval(() => {
-            this.step(this.steps <= this.stepsNeeded ? this.DFS() : this.NetAction());
+            this.step(this.steps <= this.stepsNeeded ? this._getDirection(false) : this.NetAction());
             this._drawField();
             this._drawFruit();
             this._snake.draw();
+            if (this._snake.body.length < this.StepsCountAfterCalculatePath) {
+                this._calculatePath();
+            }
         }, this._speed);
     }
     _pause() {
         this._isStarted = false;
-        this._pauseBtn.disabled = true;
         clearInterval(this._processInterval);
     }
     _restart() {
         this._isStarted = false;
         clearInterval(this._processInterval);
-        this._pauseBtn.disabled = true;
         this._drawField();
         this._snake = new Snake(this._ctx, this._sizeCell, { x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2) });
         this._snake.draw();
@@ -134,9 +141,9 @@ class Game {
         return [...wallState, ...bodyState, ...foodState];
     }
     step(action) {
-        console.log(this.steps);
+        //console.log(this.steps);
         if (this.steps < this.stepsNeeded) {
-            this._setTrainData(this._getState(), this.DFS());
+            this._setTrainData(this._getState(), this._getDirection());
         }
         this.steps++;
         if (this.steps === this.stepsNeeded) {
@@ -168,10 +175,12 @@ class Game {
             this._endGame();
             return;
         }
-        if (this._life <= 0) {
+        // Гамильтонов цикл бывает идёт куда дольше
+        /*if(this._life <= 0){
+            console.log('Закончились жизни');
             this._endGame();
             return;
-        }
+        }*/
         let growing = false;
         if (this._checkFruit(head)) {
             this._createFruit();
@@ -323,34 +332,274 @@ class Game {
         else
             return [0, 0, 0, 1];
     }
+    _createHamiltonPath() {
+        this._hamiltonPath = [];
+        this._hamiltonPath.push({ x: 0, y: 0 });
+        if (!this._hamiltonStep(this._hamiltonPath[0])) {
+            alert('Нет гамильтонова цикла!');
+        }
+    }
+    _hamiltonStep(currentPoint) {
+        if (this._hamiltonPath.length === this._sizeX * this._sizeY) {
+            let first = this._hamiltonPath[0];
+            return (first.x == currentPoint.x && first.y == currentPoint.y - 1)
+                || (first.x == currentPoint.x && first.y == currentPoint.y + 1)
+                || (first.x - 1 == currentPoint.x && first.y == currentPoint.y)
+                || (first.x + 1 == currentPoint.x && first.y == currentPoint.y);
+        }
+        const offset = [-1, 1, 1, -1];
+        for (let i = 0; i < 4; i++) {
+            let offY, offX;
+            if (i % 2 === 0) {
+                offY = offset[i];
+                offX = 0;
+            }
+            else {
+                offY = 0;
+                offX = offset[i];
+            }
+            const newPoint = { x: (currentPoint.x + offX), y: (currentPoint.y + offY) };
+            if ((newPoint.x >= 0) && (newPoint.y >= 0) && (newPoint.x < this._sizeX) && (newPoint.y < this._sizeY) && !this._hamiltonPath.some(point => point.x === newPoint.x && point.y === newPoint.y)) {
+                this._hamiltonPath.push(newPoint);
+                if (this._hamiltonStep(newPoint)) {
+                    return true;
+                }
+                this._hamiltonPath.filter(point => !(point.x === newPoint.x && point.y === newPoint.y));
+            }
+        }
+        return false;
+    }
+    _getDirection(needShift = true) {
+        const head = this._snake.head;
+        let dirX;
+        let dirY;
+        if (this.TempPath.length > 0) {
+            let nextPoint = needShift ? this.TempPath.shift() : this.TempPath[0];
+            dirX = nextPoint.x - head.x;
+            dirY = nextPoint.y - head.y;
+            if (dirX === 0 && dirY === -1)
+                return [1, 0, 0, 0];
+            else if (dirX === 1 && dirY === 0)
+                return [0, 1, 0, 0];
+            else if (dirX === 0 && dirY === 1)
+                return [0, 0, 1, 0];
+            else
+                return [0, 0, 0, 1];
+        }
+        this.StepsCountAfterCalculatePath++;
+        for (let i = 0; i < this._hamiltonPath.length; i++) {
+            const point = this._hamiltonPath[i];
+            if (point.x === head.x && point.y === head.y) {
+                let nextIndex = (i + 1 < this._hamiltonPath.length ? i + 1 : 0);
+                this.InvertHamiltonPath = true;
+                if (!this._checkIsAlive(this._hamiltonPath[nextIndex])) {
+                    nextIndex = (i - 1 < 0 ? this._hamiltonPath.length - 1 : i - 1);
+                    this.InvertHamiltonPath = false;
+                }
+                dirX = this._hamiltonPath[nextIndex].x - head.x;
+                dirY = this._hamiltonPath[nextIndex].y - head.y;
+            }
+        }
+        if (dirX === 0 && dirY === -1)
+            return [1, 0, 0, 0];
+        else if (dirX === 1 && dirY === 0)
+            return [0, 1, 0, 0];
+        else if (dirX === 0 && dirY === 1)
+            return [0, 0, 1, 0];
+        else
+            return [0, 0, 0, 1];
+    }
+    _calculatePath() {
+        this.StepsCountAfterCalculatePath = 0;
+        let finalIndexPoint = this._hamiltonPath.findIndex(point => point.x === this._fruit.x && point.y === this._fruit.y);
+        let tempPath = [];
+        let stepPiton = [this._snake.head, ...this._snake.body];
+        let index = 0;
+        let result = this.StepTempPath(index, this.GetInvert(stepPiton), this._snake.head, finalIndexPoint, stepPiton, tempPath);
+        if (result.PathIsFound) {
+            this.TempPath = result.TempPath;
+            this.InvertHamiltonPath = result.InvertHamiltonPath;
+        }
+    }
+    StepTempPath(index, invert, current, finalIndexPoint, stepPiton, tempPath) {
+        index++;
+        if (this._hamiltonPath.length < index) {
+            return new ResultAnalizePath(tempPath, false);
+        }
+        let finalPoint = this._hamiltonPath[finalIndexPoint];
+        if (current.x === finalPoint.x && current.y === finalPoint.y) {
+            if (this._snake.body.length <= 2) {
+                return new ResultAnalizePath(tempPath, true);
+            }
+            // Смотрим путь из фрукта по Гаимльтонову пути и по обратному Гамильтонову пути
+            let result = null;
+            [false, true].forEach(d => {
+                let tempPiton = [...stepPiton];
+                let isFound = true;
+                let invertHamiltonPath = d;
+                for (let j = 1; j < this._snake.body.length + 3; j++) {
+                    let hamiltonPoint;
+                    if (invertHamiltonPath) {
+                        hamiltonPoint = finalIndexPoint - j >= 0 ? this._hamiltonPath[finalIndexPoint - j] : this._hamiltonPath[this._hamiltonPath.length + (finalIndexPoint - j)];
+                    }
+                    else {
+                        hamiltonPoint = finalIndexPoint + j < this._hamiltonPath.length ? this._hamiltonPath[finalIndexPoint + j] : this._hamiltonPath[finalIndexPoint + j - this._hamiltonPath.length];
+                    }
+                    // Смотрим на Гамильтонов путь от фрукта, и если он пересекается с самой змейкой или кратчайшем путём, то тогда этот путь не подходит
+                    if (tempPiton.some(point => point.x === hamiltonPoint.x && point.y === hamiltonPoint.y)) {
+                        isFound = false;
+                        break;
+                    }
+                    tempPiton.push(hamiltonPoint);
+                }
+                if (isFound) {
+                    result = new ResultAnalizePath(tempPiton.slice(this._snake.body.length + 1, tempPiton.length), true, invertHamiltonPath);
+                }
+            });
+            if (result !== null) {
+                return result;
+            }
+            return new ResultAnalizePath(tempPath, false);
+        }
+        if ((this._sizeX + this._sizeY * 2) <= tempPath.length) {
+            return new ResultAnalizePath(tempPath, false);
+        }
+        let newElement = null;
+        if (invert) {
+            if (current.x < finalPoint.x) {
+                newElement = { x: current.x + 1, y: current.y };
+            }
+            else if (finalPoint.x < current.x) {
+                newElement = { x: current.x - 1, y: current.y };
+            }
+            else if (current.y < finalPoint.y) {
+                newElement = { x: current.x, y: current.y + 1 };
+            }
+            else if (finalPoint.y < current.y) {
+                newElement = { x: current.x, y: current.y - 1 };
+            }
+        }
+        else {
+            if (current.y < finalPoint.y) {
+                newElement = { x: current.x, y: current.y + 1 };
+            }
+            else if (finalPoint.y < current.y) {
+                newElement = { x: current.x, y: current.y - 1 };
+            }
+            else if (current.x < finalPoint.x) {
+                newElement = { x: current.x + 1, y: current.y };
+            }
+            else if (finalPoint.x < current.x) {
+                newElement = { x: current.x - 1, y: current.y };
+            }
+        }
+        if (!stepPiton.some(point => point.x === newElement.x && point.y === newElement.y)) {
+            tempPath.push(newElement);
+            stepPiton.push(newElement);
+            let result = this.StepTempPath(index, !invert, newElement, finalIndexPoint, stepPiton, tempPath);
+            if (result.PathIsFound) {
+                return result;
+            }
+            if (this._hamiltonPath.length < index) {
+                return new ResultAnalizePath(tempPath, false);
+            }
+            tempPath = tempPath.filter(point => !(point.x === newElement.x && point.y === newElement.y));
+            stepPiton = stepPiton.filter(point => !(point.x === newElement.x && point.y === newElement.y));
+        }
+        // Тормозит с этим улучшением
+        /*
+        let nextFinalPoint;
+        if (this.InvertHamiltonPath) {
+            nextFinalPoint = (finalIndexPoint - 1 < 0) ? this._hamiltonPath[this._hamiltonPath.length - 1] : this._hamiltonPath[finalIndexPoint - 1];
+        } else {
+            nextFinalPoint = (finalIndexPoint + 1 == this._hamiltonPath.length) ? this._hamiltonPath[0] : this._hamiltonPath[finalIndexPoint + 1];
+        }
+        
+        let directions = [];
+        directions.push(finalPoint.y < nextFinalPoint.y ? 0 : 2);
+        directions.push(finalPoint.x < nextFinalPoint.x ? 3 : 1);
+        directions.push(finalPoint.y < nextFinalPoint.y ? 2 : 0);
+        directions.push(finalPoint.x < nextFinalPoint.x ? 1 : 3);
+
+        let result = null;
+        directions.forEach(direction => {
+            switch(direction) {
+                case Direction.Up:
+                    newElement = {x: current.x, y: current.y - 1};
+                    break;
+                case Direction.Left:
+                    newElement = {x: current.x - 1, y: current.y};
+                    break;
+                case Direction.Down:
+                    newElement = {x: current.x, y: current.y + 1};
+                    break;
+                case Direction.Rigth:
+                    newElement = {x: current.x + 1, y: current.y};
+                    break;
+            }
+            if (this._checkIsAlive(newElement)) {
+                tempPath.push(newElement);
+                stepPiton.push(newElement);
+                let resultNew = this.StepTempPath(index, this.GetInvert(stepPiton), newElement, finalIndexPoint, stepPiton, tempPath);
+                if (resultNew.PathIsFound) {
+                    result = resultNew;
+                }
+                if (this._hamiltonPath.length < index) {
+                    result = new ResultAnalizePath(tempPath, false);
+                }
+                tempPath = tempPath.filter(point => !(point.x == newElement.x && point.y === newElement.y));
+                stepPiton = stepPiton.filter(point => !(point.x == newElement.x && point.y === newElement.y));
+            }
+        })
+        if (result !== null) {
+            return result;
+        }*/
+        return new ResultAnalizePath(tempPath, false);
+    }
+    GetInvert(stepPiton) {
+        if (this._snake.body.length > 0) {
+            let snakeDir = stepPiton[stepPiton.length - 1].y - stepPiton[stepPiton.length - 2].y;
+            let fruitDir = stepPiton[stepPiton.length - 1].y - this._fruit.y;
+            return (snakeDir < 0 && fruitDir < 0) || (snakeDir > 0 && fruitDir > 0);
+        }
+        return false;
+    }
     _checkFruit(head) {
         if (head.x === this._fruit.x && head.y === this._fruit.y) {
             return true;
         }
         return false;
     }
-    _checkIsAlive(head) {
+    _checkIsAlive(point) {
         // Проверка на столкновение со стеной
-        if ((head.x < 0) || (head.x >= this._sizeX) || (head.y < 0) || (head.y >= this._sizeY)) {
+        if ((point.x < 0) || (point.x >= this._sizeX) || (point.y < 0) || (point.y >= this._sizeY)) {
             return false;
         }
         // Проверка на столкновение с туловищем
         for (const item of this._snake.body) {
-            if (item.x === head.x && item.y === head.y) {
+            if (item.x === point.x && item.y === point.y) {
                 return false;
             }
         }
         return true;
     }
     _endGame() {
+        this.TempPath = [];
+        this.StepsCountAfterCalculatePath = 0;
         this._life = 100;
         this._snake = new Snake(this._ctx, this._sizeCell, { x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2) });
         this._drawField();
         this._snake.draw();
         this._createFruit();
         this._drawFruit();
-        this._pauseBtn.disabled = true;
         console.log('Поражение!');
+    }
+}
+class ResultAnalizePath {
+    constructor(tempPath, pathIsFound, invertHamiltonPath = false) {
+        this.TempPath = tempPath;
+        this.PathIsFound = pathIsFound;
+        this.InvertHamiltonPath = invertHamiltonPath;
     }
 }
 class Snake {
