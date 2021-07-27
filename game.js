@@ -1,10 +1,15 @@
 class Game {
     constructor() {
+        this._img = new Image();
         this._sizeX = 20;
         this._sizeY = 20;
         this._sizeCell = 30;
         this._speed = 50;
-        this._life = 100;
+        //protected _LifeNN: HTMLElement;
+        this._isNet = false;
+        this._countGame = 1;
+        this._maxLength = 0;
+        this._life = 500;
         this._isStarted = false;
         this.steps = 0;
         this.stepsNeeded = 25000; // Шагов перед обучением
@@ -19,22 +24,25 @@ class Game {
         this._canvas.style.width = this._sizeX * this._sizeCell + 'px';
         this._canvas.style.height = this._sizeY * this._sizeCell + 'px';
         this._ctx = this._canvas.getContext('2d');
+        this._img.src = 'image/apple.png';
         this._startBtn = document.getElementById('start');
         this._startBtn.addEventListener('click', this._startGame.bind(this));
         this._pauseBtn = document.getElementById('pause');
         this._pauseBtn.addEventListener('click', this._pause.bind(this));
         this._restartBtn = document.getElementById('restart');
         this._restartBtn.addEventListener('click', this._restart.bind(this));
-        this._lifeDiv = document.getElementById('life');
+        this._jsonTextArea = document.getElementById('json');
+        this._MaxLengthA = document.getElementById('MaxLengthA');
+        this._LengthA = document.getElementById('LengthA');
+        this._CountGameA = document.getElementById('CountGameA');
+        //this._LifeA = document.getElementById('LifeA');
+        this._MaxLengthNN = document.getElementById('MaxLengthNN');
+        this._LengthNN = document.getElementById('LengthNN');
+        this._CountGameNN = document.getElementById('CountGameNN');
+        //this._LifeNN = document.getElementById('LifeNN');
         this._createHamiltonPath();
-        const config = {
-            inputSize: 24,
-            hiddenLayers: [12],
-            outputSize: 4,
-            activation: 'relu',
-            learningRate: 0.1,
-        };
-        this._net = new brain.NeuralNetwork(config);
+        this._createNet();
+        //this._loadNet();
         this._drawField();
         this._snake = new Snake(this._ctx, this._sizeCell, { x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2) });
         this._snake.draw();
@@ -46,7 +54,7 @@ class Game {
     _startGame() {
         this._pauseBtn.disabled = false;
         this._processInterval = setInterval(() => {
-            this.step(this.steps <= this.stepsNeeded ? this._getDirection(false) : this.NetAction());
+            this.step(this._isNet ? this.NetAction() : this._getDirection(false));
             this._drawField();
             this._drawFruit();
             this._snake.draw();
@@ -90,8 +98,8 @@ class Game {
         this._fruit = { x, y };
     }
     _drawFruit() {
-        this._ctx.fillStyle = '#AA0000';
-        this._ctx.fillRect(this._fruit.x * this._sizeCell, this._fruit.y * this._sizeCell, this._sizeCell, this._sizeCell);
+        //this._ctx.fillStyle = '#AA0000';
+        this._ctx.drawImage(this._img, this._fruit.x * this._sizeCell, this._fruit.y * this._sizeCell, this._sizeCell, this._sizeCell);
     }
     _getState() {
         const head = this._snake.head;
@@ -149,8 +157,7 @@ class Game {
         if (this.steps === this.stepsNeeded) {
             this.NetTrain();
         }
-        this._life--;
-        this._lifeDiv.textContent = this._life.toString();
+        //this._life--;
         const max = Math.max.apply(null, action);
         let indexMax = action.indexOf(max);
         if (indexMax === -1)
@@ -188,7 +195,38 @@ class Game {
             this._life = 100;
             growing = true;
         }
+        this._setTextDivBlock();
         this._snake.move(growing);
+    }
+    _setTextDivBlock() {
+        if (this._isNet) {
+            if (this._snake.body.length + 1 > this._maxLength) {
+                this._maxLength = this._snake.body.length + 1;
+                this._MaxLengthNN.textContent = this._maxLength.toString();
+            }
+            this._LengthNN.textContent = (this._snake.body.length + 1).toString();
+            this._CountGameNN.textContent = this._countGame.toString();
+            //this._LifeNN.textContent = this._life.toString();
+        }
+        else {
+            if (this._snake.body.length + 1 > this._maxLength) {
+                this._maxLength = this._snake.body.length + 1;
+                this._MaxLengthA.textContent = this._maxLength.toString();
+            }
+            this._LengthA.textContent = (this._snake.body.length + 1).toString();
+            this._CountGameA.textContent = this._countGame.toString();
+            //this._LifeA.textContent = this._life.toString();
+        }
+    }
+    _createNet() {
+        const config = {
+            inputSize: 24,
+            hiddenLayers: [12],
+            outputSize: 4,
+            activation: 'relu',
+            learningRate: 0.1,
+        };
+        this._net = new brain.NeuralNetwork(config);
     }
     // Получение действия от сети
     NetAction() {
@@ -213,124 +251,19 @@ class Game {
             learningRate: 0.1
         });
         console.log('Обучилось!');
+        this._isNet = true;
         this._restart();
     }
-    DFS() {
-        const fruit = this._fruit;
-        const head = this._snake.head;
-        let field = new Array(this._sizeY);
-        for (let i = 0; i < field.length; i++) {
-            field[i] = new Array(this._sizeX).fill(100);
-        }
-        field[fruit.y][fruit.x] = 80;
-        field[head.y][head.x] = 0;
-        for (let item of this._snake.body) {
-            field[item.y][item.x] = 150;
-        }
-        let mainArray = [head];
-        let assistArray = [];
-        let findFood = false;
-        const offset = [-1, 1, 1, -1];
-        let num = 1;
-        let offY;
-        let offX;
-        while (!findFood) {
-            assistArray = mainArray;
-            mainArray = [];
-            for (let item of assistArray) {
-                for (let i = 0; i < 4; i++) {
-                    if (i % 2 === 0) {
-                        offY = offset[i];
-                        offX = 0;
-                    }
-                    else {
-                        offY = 0;
-                        offX = offset[i];
-                    }
-                    if ((item.y + offY || item.x + offX) < 0 || (item.y + offY >= this._sizeY || item.x + offX >= this._sizeX)) {
-                        continue;
-                    }
-                    if (field[item.y + offY][item.x + offX] === 150) {
-                        continue;
-                    }
-                    if (field[item.y + offY][item.x + offX] === 100 && field[item.y + offY][item.x + offX] != 0 || field[item.y + offY][item.x + offX] === 80) {
-                        if (item.y + offY === fruit.y && item.x + offX === fruit.x) {
-                            findFood = true;
-                        }
-                        field[item.y + offY][item.x + offX] = num;
-                        let x = item.x + offX;
-                        let y = item.y + offY;
-                        mainArray.push({ x, y });
-                    }
-                }
-            }
-            num++;
-            if (num > (this._sizeY * 3))
-                break;
-        }
-        let currentPoint = fruit;
-        const way = [fruit];
-        let findWay = false;
-        while (!(currentPoint.x === head.x && currentPoint.y === head.y)) {
-            let countWay = 0;
-            for (let i = 0; i < 4; i++) {
-                if (i % 2 === 0) {
-                    offY = offset[i];
-                    offX = 0;
-                }
-                else {
-                    offY = 0;
-                    offX = offset[i];
-                }
-                const item = { x: (currentPoint.x + offX), y: (currentPoint.y + offY) };
-                if (item.x < 0 || item.y < 0 || item.x >= this._sizeX || item.y >= this._sizeY) {
-                    continue;
-                }
-                if (field[item.y][item.x] < field[currentPoint.y][currentPoint.x]) {
-                    way.push(item);
-                    currentPoint = item;
-                    findWay = true;
-                    countWay++;
-                    break;
-                }
-            }
-            if (countWay === 0) {
-                findWay = false;
-                break;
-            }
-        }
-        way.pop();
-        let nearestPoint;
-        let dirX;
-        let dirY;
-        if (findWay) {
-            nearestPoint = way.pop();
-            dirX = nearestPoint.x - head.x;
-            dirY = nearestPoint.y - head.y;
-        }
-        else {
-            for (let i = 0; i < 4; i++) {
-                offY = (i % 2 === 0) ? offset[i] : 0;
-                offX = (i % 2 === 0) ? 0 : offset[i];
-                const item = { x: (head.x + offX), y: (head.y + offY) };
-                if (item.x < 0 || item.y < 0 || item.x >= this._sizeX || item.y >= this._sizeY) {
-                    continue;
-                }
-                if (field[item.y][item.x] > field[head.y][head.x] && field[item.y][item.x] < 100) {
-                    dirX = item.x - head.x;
-                    dirY = item.y - head.y;
-                    break;
-                }
-            }
-        }
-        if (dirX === 0 && dirY === -1)
-            return [1, 0, 0, 0];
-        else if (dirX === 1 && dirY === 0)
-            return [0, 1, 0, 0];
-        else if (dirX === 0 && dirY === 1)
-            return [0, 0, 1, 0];
-        else
-            return [0, 0, 0, 1];
+    // Сохранение сети
+    _saveNet() {
+        const json = JSON.stringify(this._net.toJSON());
+        this._jsonTextArea.innerHTML = json;
+    }
+    // Загрузка сети
+    _loadNet(jsonFile) {
+        jsonFile = JSON.parse(jsonFile);
+        this._net.fromJSON(jsonFile);
+        this._isNet = true;
     }
     _createHamiltonPath() {
         this._hamiltonPath = [];
@@ -564,6 +497,123 @@ class Game {
         }
         return false;
     }
+    DFS() {
+        const fruit = this._fruit;
+        const head = this._snake.head;
+        let field = new Array(this._sizeY);
+        for (let i = 0; i < field.length; i++) {
+            field[i] = new Array(this._sizeX).fill(100);
+        }
+        field[fruit.y][fruit.x] = 80;
+        field[head.y][head.x] = 0;
+        for (let item of this._snake.body) {
+            field[item.y][item.x] = 150;
+        }
+        let mainArray = [head];
+        let assistArray = [];
+        let findFood = false;
+        const offset = [-1, 1, 1, -1];
+        let num = 1;
+        let offY;
+        let offX;
+        while (!findFood) {
+            assistArray = mainArray;
+            mainArray = [];
+            for (let item of assistArray) {
+                for (let i = 0; i < 4; i++) {
+                    if (i % 2 === 0) {
+                        offY = offset[i];
+                        offX = 0;
+                    }
+                    else {
+                        offY = 0;
+                        offX = offset[i];
+                    }
+                    if ((item.y + offY || item.x + offX) < 0 || (item.y + offY >= this._sizeY || item.x + offX >= this._sizeX)) {
+                        continue;
+                    }
+                    if (field[item.y + offY][item.x + offX] === 150) {
+                        continue;
+                    }
+                    if (field[item.y + offY][item.x + offX] === 100 && field[item.y + offY][item.x + offX] != 0 || field[item.y + offY][item.x + offX] === 80) {
+                        if (item.y + offY === fruit.y && item.x + offX === fruit.x) {
+                            findFood = true;
+                        }
+                        field[item.y + offY][item.x + offX] = num;
+                        let x = item.x + offX;
+                        let y = item.y + offY;
+                        mainArray.push({ x, y });
+                    }
+                }
+            }
+            num++;
+            if (num > (this._sizeY * 3))
+                break;
+        }
+        let currentPoint = fruit;
+        const way = [fruit];
+        let findWay = false;
+        while (!(currentPoint.x === head.x && currentPoint.y === head.y)) {
+            let countWay = 0;
+            for (let i = 0; i < 4; i++) {
+                if (i % 2 === 0) {
+                    offY = offset[i];
+                    offX = 0;
+                }
+                else {
+                    offY = 0;
+                    offX = offset[i];
+                }
+                const item = { x: (currentPoint.x + offX), y: (currentPoint.y + offY) };
+                if (item.x < 0 || item.y < 0 || item.x >= this._sizeX || item.y >= this._sizeY) {
+                    continue;
+                }
+                if (field[item.y][item.x] < field[currentPoint.y][currentPoint.x]) {
+                    way.push(item);
+                    currentPoint = item;
+                    findWay = true;
+                    countWay++;
+                    break;
+                }
+            }
+            if (countWay === 0) {
+                findWay = false;
+                break;
+            }
+        }
+        way.pop();
+        let nearestPoint;
+        let dirX;
+        let dirY;
+        if (findWay) {
+            nearestPoint = way.pop();
+            dirX = nearestPoint.x - head.x;
+            dirY = nearestPoint.y - head.y;
+        }
+        else {
+            for (let i = 0; i < 4; i++) {
+                offY = (i % 2 === 0) ? offset[i] : 0;
+                offX = (i % 2 === 0) ? 0 : offset[i];
+                const item = { x: (head.x + offX), y: (head.y + offY) };
+                if (item.x < 0 || item.y < 0 || item.x >= this._sizeX || item.y >= this._sizeY) {
+                    continue;
+                }
+                if (field[item.y][item.x] > field[head.y][head.x] && field[item.y][item.x] < 100) {
+                    dirX = item.x - head.x;
+                    dirY = item.y - head.y;
+                    break;
+                }
+            }
+        }
+        if (dirX === 0 && dirY === -1)
+            return [1, 0, 0, 0];
+        else if (dirX === 1 && dirY === 0)
+            return [0, 1, 0, 0];
+        else if (dirX === 0 && dirY === 1)
+            return [0, 0, 1, 0];
+        else
+            return [0, 0, 0, 1];
+    }
     _checkFruit(head) {
         if (head.x === this._fruit.x && head.y === this._fruit.y) {
             return true;
@@ -586,7 +636,8 @@ class Game {
     _endGame() {
         this.TempPath = [];
         this.StepsCountAfterCalculatePath = 0;
-        this._life = 100;
+        this._countGame++;
+        //this._life = 500;
         this._snake = new Snake(this._ctx, this._sizeCell, { x: Math.floor(this._sizeX / 2), y: Math.floor(this._sizeY / 2) });
         this._drawField();
         this._snake.draw();
@@ -614,9 +665,11 @@ class Snake {
     draw() {
         this._ctx.fillStyle = '#008800';
         this._ctx.fillRect(this.head.x * this._sizeCell, this.head.y * this._sizeCell, this._sizeCell, this._sizeCell);
-        this._ctx.fillStyle = '#00BB00';
         for (let i = 0; i < this.body.length; i++) {
+            this._ctx.fillStyle = '#008800';
             this._ctx.fillRect(this.body[i].x * this._sizeCell, this.body[i].y * this._sizeCell, this._sizeCell, this._sizeCell);
+            this._ctx.fillStyle = '#00BB00';
+            this._ctx.fillRect(this.body[i].x * this._sizeCell + 2, this.body[i].y * this._sizeCell + 2, this._sizeCell - 4, this._sizeCell - 4);
         }
     }
     move(growing) {
